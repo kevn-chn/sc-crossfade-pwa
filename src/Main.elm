@@ -3,7 +3,7 @@ module Main exposing (..)
 import Api exposing (Flags, url)
 import Browser
 import Html exposing (..)
-import Html.Attributes exposing (src)
+import Html.Attributes exposing (href, rel, src, target)
 import Http
 import HttpBuilder exposing (RequestBuilder, withBody, withExpect)
 import Json.Decode as Decode exposing (Decoder, succeed)
@@ -21,10 +21,21 @@ type alias User =
     }
 
 
+type alias TrackInfo =
+    { title : String
+    , permalink_url : String
+    , user : User
+    , artwork_url : String
+    , waveform_url : String
+    }
+
+
 type alias PlaylistInfo =
     { title : String
     , permalink_url : String
     , user : User
+    , tracks : List TrackInfo
+    , waveform_url : String
     }
 
 
@@ -39,6 +50,7 @@ type alias PlaylistsCollection =
 type alias Model =
     { flags : Flags
     , playlists : List PlaylistInfo
+    , user : User
     }
 
 
@@ -46,6 +58,14 @@ initialModel : Flags -> Model
 initialModel flags =
     { flags = flags
     , playlists = []
+    , user =
+        { avatar_url = ""
+        , id = 0
+        , kind = ""
+        , last_modified = ""
+        , permalink_url = ""
+        , username = ""
+        }
     }
 
 
@@ -60,6 +80,18 @@ playlistDecoder =
         |> required "title" Decode.string
         |> required "permalink_url" Decode.string
         |> required "user" userDecoder
+        |> required "tracks" (Decode.list trackDecoder)
+        |> optional "artwork_url" Decode.string ""
+
+
+trackDecoder : Decoder TrackInfo
+trackDecoder =
+    succeed TrackInfo
+        |> required "title" Decode.string
+        |> required "permalink_url" Decode.string
+        |> required "user" userDecoder
+        |> optional "artwork_url" Decode.string ""
+        |> optional "waveform_url" Decode.string ""
 
 
 userDecoder : Decoder User
@@ -73,6 +105,14 @@ userDecoder =
         |> required "username" Decode.string
 
 
+fetchUserInfo : Flags -> Cmd Msg
+fetchUserInfo flags =
+    Http.get
+        { url = url [ "users", flags.sc_user_id ] flags
+        , expect = Http.expectJson GotUserInfo userDecoder
+        }
+
+
 fetchPlaylistsCollection : Flags -> Cmd Msg
 fetchPlaylistsCollection flags =
     Http.get
@@ -84,7 +124,10 @@ fetchPlaylistsCollection flags =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( initialModel flags
-    , fetchPlaylistsCollection flags
+    , Cmd.batch
+        [ fetchUserInfo flags
+        , fetchPlaylistsCollection flags
+        ]
     )
 
 
@@ -94,12 +137,19 @@ init flags =
 
 type Msg
     = NoOp
+    | GotUserInfo (Result Http.Error User)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        GotUserInfo (Ok user) ->
+            ( { model | user = user }, Cmd.none )
+
+        GotUserInfo (Err _) ->
+            ( model, Cmd.none )
+
         GotPlaylistsCollection (Ok collection) ->
             ( { model | playlists = collection }, Cmd.none )
 
@@ -117,11 +167,44 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ img [ src "/logo.svg" ] []
-        , h1 [] [ text "Your Elm App is working!" ]
-        , ul
-            []
-            (List.map (\playlist -> li [] [ text playlist.title ]) model.playlists)
+        [ h1 []
+            [ a
+                [ href model.user.permalink_url
+                , rel "noopener noreferrer"
+                , target "_blank"
+                ]
+                [ text model.user.username ]
+            ]
+        , viewPlaylist model.playlists
+        ]
+
+
+viewPlaylist : List PlaylistInfo -> Html Msg
+viewPlaylist playlists =
+    ul []
+        (List.map
+            (\playlist ->
+                li []
+                    [ text playlist.title
+                    , ul [] (List.map viewTrack playlist.tracks)
+                    ]
+            )
+            playlists
+        )
+
+
+viewTrack : TrackInfo -> Html Msg
+viewTrack track =
+    li []
+        [ a
+            [ href track.permalink_url
+            , rel "noopener noreferrer"
+            , target "_blank"
+            ]
+            [ span [] [ text track.user.username ]
+            , text " - "
+            , span [] [ text track.title ]
+            ]
         ]
 
 
