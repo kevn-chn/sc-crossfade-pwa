@@ -1,15 +1,15 @@
 {
-  "main.css": "/static/css/main.7f457dfb.chunk.css",
-  "main.js": "/static/js/main.fbc498ef.chunk.js",
-  "main.js.map": "/static/js/main.fbc498ef.chunk.js.map",
-  "runtime~main.js": "/static/js/runtime~main.1b922744.js",
-  "runtime~main.js.map": "/static/js/runtime~main.1b922744.js.map",
-  "vendors~main.js": "/static/js/vendors~main.3ca81432.chunk.js",
-  "vendors~main.js.map": "/static/js/vendors~main.3ca81432.chunk.js.map",
-  "./service-worker.js": "/./service-worker.js",
-  "favicon.ico": "/favicon.ico",
-  "index.html": "/index.html",
-  "logo.svg": "/logo.svg",
-  "manifest.json": "/manifest.json",
-  "precache-manifest.a509ba8a62e39e40b852e0003d2350fa.js": "/precache-manifest.a509ba8a62e39e40b852e0003d2350fa.js"
+  "main.css": "/sc-crossfade-pwa/static/css/main.7f457dfb.chunk.css",
+  "main.js": "/sc-crossfade-pwa/static/js/main.d9dace42.chunk.js",
+  "main.js.map": "/sc-crossfade-pwa/static/js/main.d9dace42.chunk.js.map",
+  "runtime~main.js": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js",
+  "runtime~main.js.map": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js.map",
+  "vendors~main.js": "/sc-crossfade-pwa/static/js/vendors~main.3ca81432.chunk.js",
+  "vendors~main.js.map": "/sc-crossfade-pwa/static/js/vendors~main.3ca81432.chunk.js.map",
+  "./service-worker.js": "/sc-crossfade-pwa/./service-worker.js",
+  "favicon.ico": "/sc-crossfade-pwa/favicon.ico",
+  "index.html": "/sc-crossfade-pwa/index.html",
+  "logo.svg": "/sc-crossfade-pwa/logo.svg",
+  "manifest.json": "/sc-crossfade-pwa/manifest.json",
+  "precache-manifest.ee38b1574d5e4e1f2b5f924f94029bf8.js": "/sc-crossfade-pwa/precache-manifest.ee38b1574d5e4e1f2b5f924f94029bf8.js"
 }
