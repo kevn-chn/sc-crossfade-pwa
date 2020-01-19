@@ -1,5 +1,19 @@
 const equal = require('fast-deep-equal');
-const purgecss = require('@fullhuman/postcss-purgecss');
+
+class TailwindExtractor {
+  static extract(content) {
+    return content.match(/[A-Za-z0-9-_:\/]+/g) || [];
+  }
+}
+
+const purgecss = require('@fullhuman/postcss-purgecss')({
+  extractors: [{
+    extensions: ["elm"],
+    extractor: TailwindExtractor,
+  }],
+  content: ["./src/**/*.elm"],
+  whitelist: ["html", "body"],
+});
 
 module.exports = {
   homepage: "https://kevn-chn.github.io/sc-crossfade-pwa",
@@ -13,9 +27,7 @@ module.exports = {
     postCssLoader.options.plugins = () => [
       ...plugins,
       require('tailwindcss'),
-      purgecss({
-        content: ['./**/*.html'],
-      }),
+      ...env === 'production' ? [purgecss] : [],
     ];
 
     return config;
