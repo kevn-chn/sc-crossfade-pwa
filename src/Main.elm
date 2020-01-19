@@ -3,7 +3,7 @@ module Main exposing (..)
 import Api exposing (Flags, url)
 import Browser
 import Html exposing (..)
-import Html.Attributes exposing (href, rel, src, target)
+import Html.Attributes exposing (class, href, rel, src, target)
 import Http
 import HttpBuilder exposing (RequestBuilder, withBody, withExpect)
 import Json.Decode as Decode exposing (Decoder, succeed)
@@ -166,27 +166,34 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ h1 []
+    div [ class "max-w-2xl m-6 md:mx-auto" ]
+        [ h1 [ class "mb-4" ]
             [ a
-                [ href model.user.permalink_url
+                [ class "hover:underline"
+                , href model.user.permalink_url
                 , rel "noopener noreferrer"
                 , target "_blank"
                 ]
                 [ text model.user.username ]
             ]
-        , viewPlaylist model.playlists
+        , viewPlaylists model.playlists
         ]
 
 
-viewPlaylist : List PlaylistInfo -> Html Msg
-viewPlaylist playlists =
+viewPlaylists : List PlaylistInfo -> Html Msg
+viewPlaylists playlists =
     ul []
         (List.map
             (\playlist ->
-                li []
-                    [ text playlist.title
-                    , ul [] (List.map viewTrack playlist.tracks)
+                li [ class "border rounded mb-6 p-4 shadow-lg" ]
+                    [ a
+                        [ class "text-xl font-bold hover:underline"
+                        , href playlist.permalink_url
+                        , rel "noopener noreferrer"
+                        , target "_blank"
+                        ]
+                        [ text playlist.title ]
+                    , ul [ class "mt-4" ] (List.map viewTrack playlist.tracks)
                     ]
             )
             playlists
@@ -197,7 +204,8 @@ viewTrack : TrackInfo -> Html Msg
 viewTrack track =
     li []
         [ a
-            [ href track.permalink_url
+            [ class "hover:underline"
+            , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"
             ]
