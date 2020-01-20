@@ -4,7 +4,7 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/favicon.ico"
   },
   {
-    "revision": "c6cca3c040f2ffbd6b003736cd0bdfe5",
+    "revision": "bea58a1e9e5ae4d8ddf8c2acbe82dd52",
     "url": "/sc-crossfade-pwa/index.html"
   },
   {
@@ -16,12 +16,12 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/manifest.json"
   },
   {
-    "revision": "c4b4fd945152bce53f22",
-    "url": "/sc-crossfade-pwa/static/css/main.731af87f.chunk.css"
+    "revision": "0645c43ef94dc5c54b9b",
+    "url": "/sc-crossfade-pwa/static/css/main.8df5bba9.chunk.css"
   },
   {
-    "revision": "c4b4fd945152bce53f22",
-    "url": "/sc-crossfade-pwa/static/js/main.c4b4fd94.chunk.js"
+    "revision": "0645c43ef94dc5c54b9b",
+    "url": "/sc-crossfade-pwa/static/js/main.0645c43e.chunk.js"
   },
   {
     "revision": "a7be404408468aec4d11",
