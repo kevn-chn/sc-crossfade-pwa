@@ -248,7 +248,7 @@ onClickStopPropagation msg =
 view : Model -> Html Msg
 view { playlists, ui, user } =
     div [ class "max-w-2xl m-6 md:mx-auto" ]
-        [ h1 [ class "mb-4" ]
+        [ h1 [ class "mb-4 text-2xl" ]
             [ a
                 [ class "hover:underline"
                 , href user.permalink_url
@@ -282,7 +282,8 @@ viewPlaylists playlists uiPlaylistsById =
                         ]
                         [ text playlist.title
                         , a
-                            [ href playlist.permalink_url
+                            [ class "h-6"
+                            , href playlist.permalink_url
                             , rel "noopener noreferrer"
                             , target "_blank"
                             , title "Open playlist in Soundcloud"
@@ -304,13 +305,20 @@ viewPlaylists playlists uiPlaylistsById =
 viewTrack : TrackInfo -> Html Msg
 viewTrack track =
     li [ class "flex justify-between items-center py-1" ]
-        [ p []
-            [ span [] [ text track.user.username ]
-            , text " - "
-            , span [] [ text track.title ]
+        [ p [ class "flex items-center" ]
+            [ if String.length track.artwork_url > 0 then
+                img
+                    [ class "inline-block h-6 mr-2"
+                    , src (String.replace "-large" "-small" track.artwork_url)
+                    ]
+                    []
+
+              else
+                div [ class "inline-block w-6 mr-4 h-6 bg-gray-200" ] []
+            , span [] [ text (track.user.username ++ " - " ++ track.title) ]
             ]
         , a
-            [ class "hover:underline"
+            [ class "h-6"
             , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"
