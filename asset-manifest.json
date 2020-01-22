@@ -1,7 +1,7 @@
 {
-  "main.css": "/sc-crossfade-pwa/static/css/main.731af87f.chunk.css",
-  "main.js": "/sc-crossfade-pwa/static/js/main.24d48256.chunk.js",
-  "main.js.map": "/sc-crossfade-pwa/static/js/main.24d48256.chunk.js.map",
+  "main.css": "/sc-crossfade-pwa/static/css/main.3f2ced1f.chunk.css",
+  "main.js": "/sc-crossfade-pwa/static/js/main.e3a252c3.chunk.js",
+  "main.js.map": "/sc-crossfade-pwa/static/js/main.e3a252c3.chunk.js.map",
   "runtime~main.js": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js",
   "runtime~main.js.map": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js.map",
   "vendors~main.js": "/sc-crossfade-pwa/static/js/vendors~main.3ca81432.chunk.js",
@@ -11,5 +11,5 @@
   "index.html": "/sc-crossfade-pwa/index.html",
   "logo.svg": "/sc-crossfade-pwa/logo.svg",
   "manifest.json": "/sc-crossfade-pwa/manifest.json",
-  "precache-manifest.c4a36961db48e8733b71bdbacf94a44b.js": "/sc-crossfade-pwa/precache-manifest.c4a36961db48e8733b71bdbacf94a44b.js"
+  "precache-manifest.0e73fabc527b7d42d25f7fb328177100.js": "/sc-crossfade-pwa/precache-manifest.0e73fabc527b7d42d25f7fb328177100.js"
 }
