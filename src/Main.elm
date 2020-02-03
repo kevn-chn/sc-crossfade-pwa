@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Api exposing (Flags)
+import Array exposing (Array)
 import Audio
 import Browser
 import Dict exposing (Dict)
@@ -13,6 +14,7 @@ import Json.Decode as Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as Pipeline exposing (optional, required)
 import Svg.Attributes
 import Task exposing (Task)
+import Time exposing (Posix, every, millisToPosix, utc)
 
 
 type alias User =
@@ -27,6 +29,8 @@ type alias User =
 
 type alias TrackInfo =
     { title : String
+    , id : Int
+    , duration : Int
     , permalink_url : String
     , user : User
     , artwork_url : String
@@ -38,6 +42,7 @@ type alias TrackInfo =
 type alias PlaylistInfo =
     { title : String
     , id : Int
+    , duration : Int
     , permalink_url : String
     , user : User
     , tracks : List TrackInfo
@@ -55,6 +60,9 @@ type alias Accordion =
 
 type alias Player =
     { currentTrack : TrackInfo
+    , currentIndex : Int
+    , elapsedTime : Int
+    , tracks : Array TrackInfo
     , isPlaying : Bool
     }
 
@@ -90,6 +98,9 @@ defaultAccordion =
 defaultPlayer : Player
 defaultPlayer =
     { currentTrack = defaultTrackInfo
+    , currentIndex = 0
+    , elapsedTime = 0
+    , tracks = Array.empty
     , isPlaying = False
     }
 
@@ -97,6 +108,8 @@ defaultPlayer =
 defaultTrackInfo : TrackInfo
 defaultTrackInfo =
     { title = ""
+    , id = 0
+    , duration = 0
     , permalink_url = ""
     , user = defaultUser
     , artwork_url = ""
@@ -126,6 +139,7 @@ playlistDecoder =
     succeed PlaylistInfo
         |> required "title" Decode.string
         |> required "id" Decode.int
+        |> required "duration" Decode.int
         |> required "permalink_url" Decode.string
         |> required "user" userDecoder
         |> required "tracks" (Decode.list trackDecoder)
@@ -136,6 +150,8 @@ trackDecoder : Decoder TrackInfo
 trackDecoder =
     succeed TrackInfo
         |> required "title" Decode.string
+        |> required "id" Decode.int
+        |> required "duration" Decode.int
         |> required "permalink_url" Decode.string
         |> required "user" userDecoder
         |> optional "artwork_url" Decode.string ""
@@ -187,9 +203,13 @@ init flags =
 type Msg
     = GotUserInfo (Result Http.Error User)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
+    | PlayTrack Int
     | PauseTrack
-    | PlayTrack TrackInfo
+    | ResumeTrack
+    | EndTrack
+    | PlayFromPlaylist Int PlaylistInfo
     | TogglePlaylistAccordion Int
+    | Tick
     | NoOp
 
 
@@ -212,6 +232,21 @@ update msg model =
         GotPlaylistsCollection (Err _) ->
             ( model, Cmd.none )
 
+        PlayTrack trackIndex ->
+            let
+                { flags, player } =
+                    model
+
+                ( updated, playCmd ) =
+                    case Array.get trackIndex player.tracks of
+                        Just track ->
+                            ( { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = True }, Audio.play (Api.addQuery track.stream_url flags) )
+
+                        Nothing ->
+                            ( model.player, Cmd.none )
+            in
+            ( { model | player = updated }, playCmd )
+
         PauseTrack ->
             let
                 { player } =
@@ -222,15 +257,45 @@ update msg model =
             in
             ( { model | player = updated }, Audio.pause () )
 
-        PlayTrack track ->
+        ResumeTrack ->
+            let
+                { flags, player } =
+                    model
+
+                updated =
+                    { player | isPlaying = True }
+            in
+            ( { model | player = updated }, Audio.play (Api.addQuery player.currentTrack.stream_url flags) )
+
+        EndTrack ->
             let
                 { player } =
                     model
 
+                nextIndex =
+                    player.currentIndex + 1
+
                 updated =
-                    { player | currentTrack = track, isPlaying = True }
+                    { player | elapsedTime = 0, isPlaying = False }
             in
-            ( { model | player = updated }, Audio.play (Api.addQuery track.stream_url model.flags) )
+            if nextIndex < Array.length player.tracks then
+                update (PlayTrack nextIndex) model
+
+            else
+                ( { model | player = updated }, Cmd.none )
+
+        PlayFromPlaylist trackIndex playlist ->
+            let
+                { player } =
+                    model
+
+                tracks =
+                    Array.fromList playlist.tracks
+
+                updated =
+                    { player | tracks = tracks }
+            in
+            update (PlayTrack trackIndex) { model | player = updated }
 
         TogglePlaylistAccordion id ->
             let
@@ -247,12 +312,48 @@ update msg model =
             in
             ( { model | playlistUIById = updated }, Cmd.none )
 
+        Tick ->
+            let
+                { player } =
+                    model
+
+                elapsedTime =
+                    player.elapsedTime + 200
+
+                updated =
+                    { player | elapsedTime = elapsedTime }
+            in
+            ( { model | player = updated }, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
 
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ if model.player.isPlaying then
+            every 200 <| always Tick
+
+          else
+            Sub.none
+        , Audio.end (always EndTrack)
+        ]
+
+
 
 ---- VIEW ----
+
+
+formatTime : Int -> String
+formatTime time =
+    let
+        posixTime =
+            millisToPosix time
+    in
+    [ Time.toMinute utc posixTime, Time.toSecond utc posixTime ]
+        |> List.map (String.fromInt >> String.padLeft 2 '0')
+        |> String.join ":"
 
 
 onClickStopPropagation : msg -> Attribute msg
@@ -281,14 +382,15 @@ view { player, playlists, playlistUIById, user } =
 viewPlayer : Player -> Html Msg
 viewPlayer player =
     let
-        { currentTrack, isPlaying } =
+        { currentIndex, currentTrack, elapsedTime, tracks, isPlaying } =
             player
 
         hasTrack =
             String.length currentTrack.stream_url > 0
 
-        disabledClass =
-            if not hasTrack then
+        disabledClass : Bool -> String
+        disabledClass isDisabled =
+            if isDisabled then
                 " opacity-50 cursor-not-allowed"
 
             else
@@ -301,19 +403,31 @@ viewPlayer player =
             else
                 ""
 
-        msg =
+        prevMsg =
+            PlayTrack (currentIndex - 1)
+
+        playMsg =
             if isPlaying then
                 PauseTrack
 
             else
-                PlayTrack currentTrack
+                ResumeTrack
+
+        nextMsg =
+            PlayTrack (currentIndex + 1)
     in
     section [ class "fixed h-16 bottom-0 left-0 w-screen bg-black text-white" ]
-        [ div [ class ("flex items-center max-w-2xl mx-6 md:mx-auto h-full p-4 whitespace-no-wrap" ++ justifyCenter) ]
+        [ div [ class ("flex items-center max-w-2xl md:mx-auto h-full p-4 whitespace-no-wrap" ++ justifyCenter) ]
             [ button
-                [ class ("mr-2 h-6" ++ disabledClass)
-                , onClick msg
-                , disabled (not hasTrack)
+                [ class <| "h-6" ++ (disabledClass <| currentIndex == 0)
+                , onClick prevMsg
+                , disabled <| currentIndex == 0
+                ]
+                [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipBack ]
+            , button
+                [ class <| "ml-2 h-6" ++ (disabledClass <| not hasTrack)
+                , onClick playMsg
+                , disabled <| not hasTrack
                 ]
                 [ Icons.toHtml []
                     (if isPlaying then
@@ -323,22 +437,29 @@ viewPlayer player =
                         Icons.play
                     )
                 ]
+            , button
+                [ class <| "ml-2 h-6" ++ (disabledClass <| currentIndex + 1 >= Array.length tracks)
+                , onClick nextMsg
+                , disabled <| currentIndex + 1 >= Array.length tracks
+                ]
+                [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipForward ]
             , if hasTrack then
-                div []
+                p [ class "flex w-full ml-2 justify-between items-center" ]
                     [ if String.length currentTrack.artwork_url > 0 then
                         img
-                            [ class "inline-block h-full mr-2"
+                            [ class "hidden md:inline-block h-full mr-2"
                             , src (String.replace "-large" "-small" currentTrack.artwork_url)
                             ]
                             []
 
                       else
                         div [ class "inline-block w-8 mr-4 h-full bg-gray-200" ] []
-                    , span [] [ text (currentTrack.user.username ++ " - " ++ currentTrack.title) ]
+                    , span [ class "w-full" ] [ text <| currentTrack.user.username ++ " - " ++ currentTrack.title ]
+                    , span [] [ text <| formatTime elapsedTime ++ " / " ++ formatTime currentTrack.duration ]
                     ]
 
               else
-                p [] [ text "Select a Track" ]
+                p [ class "ml-2" ] [ text "Select a Track" ]
             ]
         ]
 
@@ -362,9 +483,10 @@ viewPlaylists playlists playlistUIById player =
                         [ class "text-xl font-bold flex justify-between items-center p-4 w-full"
                         , onClick (TogglePlaylistAccordion playlist.id)
                         ]
-                        [ text playlist.title
+                        [ span [ class "w-full text-left" ] [ text playlist.title ]
+                        , span [ class "ml-2 text-base font-normal" ] [ text <| formatTime playlist.duration ]
                         , a
-                            [ class "h-6"
+                            [ class "h-6 ml-2"
                             , href playlist.permalink_url
                             , rel "noopener noreferrer"
                             , target "_blank"
@@ -375,8 +497,8 @@ viewPlaylists playlists playlistUIById player =
                         ]
                     , if isOpen then
                         ul [ class "pb-4" ]
-                            (List.map
-                                (\track -> li [] [ viewTrack track (player.currentTrack == track) ])
+                            (List.indexedMap
+                                (\index track -> li [] [ viewTrack track index player playlist ])
                                 playlist.tracks
                             )
 
@@ -388,12 +510,25 @@ viewPlaylists playlists playlistUIById player =
         )
 
 
-viewTrack : TrackInfo -> Bool -> Html Msg
-viewTrack track isPlaying =
+viewTrack : TrackInfo -> Int -> Player -> PlaylistInfo -> Html Msg
+viewTrack track trackIndex player playlist =
     let
+        isSelected =
+            player.currentTrack == track
+
+        isPlaying =
+            isSelected && player.isPlaying
+
         backgroundColor =
-            if isPlaying then
+            if isSelected then
                 " bg-gray-200"
+
+            else
+                ""
+
+        bold =
+            if isSelected then
+                " font-bold"
 
             else
                 ""
@@ -407,9 +542,9 @@ viewTrack track isPlaying =
     in
     button
         [ class ("flex justify-between items-center px-4 py-1 w-full hover:bg-gray-200" ++ backgroundColor)
-        , onClick (PlayTrack track)
+        , onClick (PlayFromPlaylist trackIndex playlist)
         ]
-        [ p [ class "flex items-center" ]
+        [ p [ class ("flex w-full items-center text-left" ++ bold) ]
             [ if String.length track.artwork_url > 0 then
                 img
                     [ class ("inline-block h-6 mr-2" ++ opacity)
@@ -426,8 +561,9 @@ viewTrack track isPlaying =
               else
                 text ""
             ]
+        , p [ class "ml-2 text-sm font-light" ] [ text <| formatTime track.duration ]
         , a
-            [ class "h-6"
+            [ class "h-6 ml-2"
             , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"
@@ -448,5 +584,5 @@ main =
         { view = view
         , init = init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         }

@@ -20,7 +20,7 @@ serviceWorker.unregister();
 let audio = new Audio();
 
 audio.onended = () => {
-  // app.ports.end.send(null);
+  app.ports.end.send(null);
 };
 
 app.ports.play.subscribe((src) => {
