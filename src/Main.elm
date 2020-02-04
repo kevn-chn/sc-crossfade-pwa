@@ -235,19 +235,23 @@ update msg model =
             ( model, Cmd.none )
 
         PlayTrack trackIndex ->
-            let
-                { flags, player } =
-                    model
+            case Array.get trackIndex model.player.tracks of
+                Just track ->
+                    let
+                        { flags, player } =
+                            model
 
-                ( updated, playCmd ) =
-                    case Array.get trackIndex player.tracks of
-                        Just track ->
-                            ( { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = True }, Audio.play (Api.addQuery track.stream_url flags) )
+                        updated =
+                            { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = True }
+                    in
+                    if track == player.currentTrack then
+                        ( model, Cmd.none )
 
-                        Nothing ->
-                            ( model.player, Cmd.none )
-            in
-            ( { model | player = updated }, playCmd )
+                    else
+                        ( { model | player = updated }, Audio.play (Api.addQuery track.stream_url flags) )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         PauseTrack ->
             let
@@ -391,8 +395,8 @@ onClickStopPropagation msg =
 
 view : Model -> Html Msg
 view { player, playlists, playlistUIById, user } =
-    div [ class "max-w-2xl m-6 md:mx-auto mb-24" ]
-        [ h1 [ class "mb-4 text-2xl" ]
+    div [ class "max-w-2xl mx-auto mb-24" ]
+        [ h1 [ class "p-4 text-2xl" ]
             [ a
                 [ class "hover:underline"
                 , href user.permalink_url
@@ -423,12 +427,12 @@ viewPlayer player =
             else
                 ""
 
-        justifyCenter =
+        justify =
             if not hasTrack then
                 " justify-center"
 
             else
-                ""
+                " justify-between"
 
         playMsg =
             if isPlaying then
@@ -438,57 +442,68 @@ viewPlayer player =
                 ResumeTrack
     in
     section [ class "fixed h-16 bottom-0 left-0 w-screen bg-black text-white" ]
-        [ div [ class ("flex items-center max-w-2xl md:mx-auto h-full p-4 whitespace-no-wrap" ++ justifyCenter) ]
-            [ button
-                [ class <| "h-6" ++ (disabledClass <| not hasTrack)
-                , onClick SkipBack
-                , disabled <| not hasTrack
-                ]
-                [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipBack ]
-            , button
-                [ class <| "ml-2 h-6" ++ (disabledClass <| not hasTrack)
-                , onClick playMsg
-                , disabled <| not hasTrack
-                ]
-                [ Icons.toHtml []
-                    (if isPlaying then
-                        Icons.pause
+        [ div [ class ("flex items-center max-w-2xl mx-auto h-full p-4" ++ justify) ]
+            [ div [ class "flex flex-none items-center" ]
+                [ button
+                    [ class <| "h-6" ++ (disabledClass <| not hasTrack)
+                    , onClick SkipBack
+                    , disabled <| not hasTrack
+                    ]
+                    [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipBack ]
+                , button
+                    [ class <| "h-6 ml-2" ++ (disabledClass <| not hasTrack)
+                    , onClick playMsg
+                    , disabled <| not hasTrack
+                    ]
+                    [ Icons.toHtml []
+                        (if isPlaying then
+                            Icons.pause
 
-                     else
-                        Icons.play
-                    )
+                         else
+                            Icons.play
+                        )
+                    ]
+                , button
+                    [ class <| "h-6 ml-2" ++ (disabledClass <| currentIndex + 1 >= Array.length tracks)
+                    , onClick <| PlayTrack (currentIndex + 1)
+                    , disabled <| currentIndex + 1 >= Array.length tracks
+                    ]
+                    [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipForward ]
                 ]
-            , button
-                [ class <| "ml-2 h-6" ++ (disabledClass <| currentIndex + 1 >= Array.length tracks)
-                , onClick <| PlayTrack (currentIndex + 1)
-                , disabled <| currentIndex + 1 >= Array.length tracks
-                ]
-                [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipForward ]
             , if hasTrack then
-                p [ class "flex w-full ml-2 justify-between items-center" ]
-                    [ if String.length currentTrack.artwork_url > 0 then
-                        img
-                            [ class "hidden md:inline-block h-full mr-2"
-                            , src (String.replace "-large" "-small" currentTrack.artwork_url)
+                div [ class "flex flex-grow min-w-0 mx-4 md:mx-8 justify-between items-center" ]
+                    [ div [ class "hidden sm:block flex-none relative w-8 h-8 mr-4 bg-gray-300" ]
+                        [ if String.length currentTrack.artwork_url > 0 then
+                            img
+                                [ class "absolute h-full"
+                                , src (String.replace "-large" "-small" currentTrack.artwork_url)
+                                ]
+                                []
+
+                          else
+                            text ""
+                        ]
+                    , div [ class "flex flex-col flex-grow min-w-0" ]
+                        [ p [ class "text-sm truncate" ] [ text <| currentTrack.user.username ++ " - " ++ currentTrack.title ]
+                        , input
+                            [ class "w-full"
+                            , type_ "range"
+                            , Attr.min "0"
+                            , Attr.max "100"
+                            , Attr.value <| String.fromInt <| player.elapsedTime * 100 // currentTrack.duration
+                            , onInput SeekTrack
                             ]
                             []
-
-                      else
-                        div [ class "inline-block w-8 mr-4 h-full bg-gray-200" ] []
-                    , span [ class "w-full" ] [ text <| currentTrack.user.username ++ " - " ++ currentTrack.title ]
-                    , input
-                        [ type_ "range"
-                        , Attr.min "0"
-                        , Attr.max "100"
-                        , Attr.value <| String.fromInt <| player.elapsedTime * 100 // currentTrack.duration
-                        , onInput SeekTrack
                         ]
-                        []
-                    , span [] [ text <| formatTime elapsedTime ++ " / " ++ formatTime currentTrack.duration ]
                     ]
 
               else
                 p [ class "ml-2" ] [ text "Select a Track" ]
+            , if hasTrack then
+                p [ class "flex-none text-sm" ] [ text <| formatTime elapsedTime ++ " / " ++ formatTime currentTrack.duration ]
+
+              else
+                text ""
             ]
         ]
 
@@ -568,30 +583,39 @@ viewTrack track trackIndex player playlist =
 
             else
                 ""
+
+        playMsg =
+            if isPlaying then
+                PauseTrack
+
+            else if isSelected then
+                ResumeTrack
+
+            else
+                PlayFromPlaylist trackIndex playlist
     in
     button
         [ class ("flex justify-between items-center px-4 py-1 w-full hover:bg-gray-200" ++ backgroundColor)
-        , onClick (PlayFromPlaylist trackIndex playlist)
+        , onClick playMsg
         ]
-        [ p [ class ("flex w-full items-center text-left" ++ bold) ]
-            [ div [ class "w-6 h-6 mr-2 bg-gray-300" ]
-                [ if String.length track.artwork_url > 0 then
-                    img
-                        [ class ("absolute inline-block h-6 mr-2" ++ opacity)
-                        , src (String.replace "-large" "-small" track.artwork_url)
-                        ]
-                        []
+        [ div [ class "relative flex-none w-6 h-6 mr-2 bg-gray-300" ]
+            [ if String.length track.artwork_url > 0 then
+                img
+                    [ class ("absolute h-full" ++ opacity)
+                    , src (String.replace "-large" "-small" track.artwork_url)
+                    ]
+                    []
 
-                  else
-                    text ""
-                ]
-            , span [] [ text (track.user.username ++ " - " ++ track.title) ]
+              else
+                text ""
             , if isPlaying then
-                Icons.toHtml [ Svg.Attributes.class "absolute p-1" ] Icons.volume2
+                Icons.toHtml [ Svg.Attributes.class "absolute left-0 p-1" ] Icons.volume2
 
               else
                 text ""
             ]
+        , p [ class ("flex-grow text-left truncate" ++ bold) ]
+            [ text (track.user.username ++ " - " ++ track.title) ]
         , p [ class "ml-2 text-sm font-light" ] [ text <| formatTime track.duration ]
         , a
             [ class "h-6 ml-2"

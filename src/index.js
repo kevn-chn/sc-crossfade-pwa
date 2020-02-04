@@ -18,6 +18,7 @@ serviceWorker.unregister();
 
 // Ports for Web Audio API playback
 let audio = new Audio();
+audio.controls = true;
 
 audio.onended = () => {
   app.ports.end.send(null);
