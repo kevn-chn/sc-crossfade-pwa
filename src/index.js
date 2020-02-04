@@ -36,6 +36,6 @@ app.ports.pause.subscribe(() => {
   audio.pause();
 });
 
-// app.ports.seek.subscribe((time) => {
-//   audio.currentTime = time / 1000;
-// });
+app.ports.seek.subscribe((time) => {
+  audio.currentTime = time / 1000;
+});

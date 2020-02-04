@@ -7,8 +7,8 @@ import Browser
 import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
-import Html.Attributes exposing (class, disabled, href, rel, src, target, title)
-import Html.Events exposing (onClick, stopPropagationOn)
+import Html.Attributes as Attr exposing (class, disabled, href, rel, src, target, title, type_)
+import Html.Events exposing (onClick, onInput, stopPropagationOn)
 import Http
 import Json.Decode as Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as Pipeline exposing (optional, required)
@@ -206,6 +206,8 @@ type Msg
     | PlayTrack Int
     | PauseTrack
     | ResumeTrack
+    | SeekTrack String
+    | SkipBack
     | EndTrack
     | PlayFromPlaylist Int PlaylistInfo
     | TogglePlaylistAccordion Int
@@ -266,6 +268,31 @@ update msg model =
                     { player | isPlaying = True }
             in
             ( { model | player = updated }, Audio.play (Api.addQuery player.currentTrack.stream_url flags) )
+
+        SeekTrack valueString ->
+            case String.toInt valueString of
+                Just value ->
+                    let
+                        { player } =
+                            model
+
+                        newTime =
+                            value * player.currentTrack.duration // 100
+
+                        updated =
+                            { player | elapsedTime = newTime }
+                    in
+                    ( { model | player = updated }, Audio.seek newTime )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        SkipBack ->
+            if model.player.currentIndex == 0 || model.player.elapsedTime > 3000 then
+                update (SeekTrack "0") model
+
+            else
+                update (PlayTrack <| model.player.currentIndex - 1) model
 
         EndTrack ->
             let
@@ -403,25 +430,19 @@ viewPlayer player =
             else
                 ""
 
-        prevMsg =
-            PlayTrack (currentIndex - 1)
-
         playMsg =
             if isPlaying then
                 PauseTrack
 
             else
                 ResumeTrack
-
-        nextMsg =
-            PlayTrack (currentIndex + 1)
     in
     section [ class "fixed h-16 bottom-0 left-0 w-screen bg-black text-white" ]
         [ div [ class ("flex items-center max-w-2xl md:mx-auto h-full p-4 whitespace-no-wrap" ++ justifyCenter) ]
             [ button
-                [ class <| "h-6" ++ (disabledClass <| currentIndex == 0)
-                , onClick prevMsg
-                , disabled <| currentIndex == 0
+                [ class <| "h-6" ++ (disabledClass <| not hasTrack)
+                , onClick SkipBack
+                , disabled <| not hasTrack
                 ]
                 [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipBack ]
             , button
@@ -439,7 +460,7 @@ viewPlayer player =
                 ]
             , button
                 [ class <| "ml-2 h-6" ++ (disabledClass <| currentIndex + 1 >= Array.length tracks)
-                , onClick nextMsg
+                , onClick <| PlayTrack (currentIndex + 1)
                 , disabled <| currentIndex + 1 >= Array.length tracks
                 ]
                 [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipForward ]
@@ -455,6 +476,14 @@ viewPlayer player =
                       else
                         div [ class "inline-block w-8 mr-4 h-full bg-gray-200" ] []
                     , span [ class "w-full" ] [ text <| currentTrack.user.username ++ " - " ++ currentTrack.title ]
+                    , input
+                        [ type_ "range"
+                        , Attr.min "0"
+                        , Attr.max "100"
+                        , Attr.value <| String.fromInt <| player.elapsedTime * 100 // currentTrack.duration
+                        , onInput SeekTrack
+                        ]
+                        []
                     , span [] [ text <| formatTime elapsedTime ++ " / " ++ formatTime currentTrack.duration ]
                     ]
 
@@ -545,15 +574,17 @@ viewTrack track trackIndex player playlist =
         , onClick (PlayFromPlaylist trackIndex playlist)
         ]
         [ p [ class ("flex w-full items-center text-left" ++ bold) ]
-            [ if String.length track.artwork_url > 0 then
-                img
-                    [ class ("inline-block h-6 mr-2" ++ opacity)
-                    , src (String.replace "-large" "-small" track.artwork_url)
-                    ]
-                    []
+            [ div [ class "w-6 h-6 mr-2 bg-gray-300" ]
+                [ if String.length track.artwork_url > 0 then
+                    img
+                        [ class ("absolute inline-block h-6 mr-2" ++ opacity)
+                        , src (String.replace "-large" "-small" track.artwork_url)
+                        ]
+                        []
 
-              else
-                div [ class "inline-block w-6 mr-4 h-6 bg-gray-200" ] []
+                  else
+                    text ""
+                ]
             , span [] [ text (track.user.username ++ " - " ++ track.title) ]
             , if isPlaying then
                 Icons.toHtml [ Svg.Attributes.class "absolute p-1" ] Icons.volume2
