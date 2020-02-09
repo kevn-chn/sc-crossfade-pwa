@@ -204,6 +204,8 @@ type Msg
     = GotUserInfo (Result Http.Error User)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
     | PlayTrack Int
+    | PlaybackSuccess
+    | PlaybackError
     | PauseTrack
     | ResumeTrack
     | SeekTrack String
@@ -242,7 +244,7 @@ update msg model =
                             model
 
                         updated =
-                            { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = True }
+                            { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = False }
                     in
                     if track == player.currentTrack then
                         ( model, Cmd.none )
@@ -252,6 +254,20 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        PlaybackSuccess ->
+            let
+                { player } =
+                    model
+
+                updated =
+                    { player | isPlaying = True }
+            in
+            ( { model | player = updated }, Cmd.none )
+
+        PlaybackError ->
+            -- TODO: Add error handling
+            ( model, Cmd.none )
 
         PauseTrack ->
             let
@@ -267,11 +283,8 @@ update msg model =
             let
                 { flags, player } =
                     model
-
-                updated =
-                    { player | isPlaying = True }
             in
-            ( { model | player = updated }, Audio.play (Api.addQuery player.currentTrack.stream_url flags) )
+            ( model, Audio.play (Api.addQuery player.currentTrack.stream_url flags) )
 
         SeekTrack valueString ->
             case String.toInt valueString of
@@ -369,6 +382,8 @@ subscriptions model =
           else
             Sub.none
         , Audio.end (always EndTrack)
+        , Audio.playbackSuccess (always PlaybackSuccess)
+        , Audio.playbackError (always PlaybackError)
         ]
 
 

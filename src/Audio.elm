@@ -4,6 +4,12 @@ port module Audio exposing (..)
 port play : String -> Cmd msg
 
 
+port playbackSuccess : (() -> msg) -> Sub msg
+
+
+port playbackError : (() -> msg) -> Sub msg
+
+
 port pause : () -> Cmd msg
 
 

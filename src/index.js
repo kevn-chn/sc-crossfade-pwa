@@ -30,7 +30,14 @@ app.ports.play.subscribe((src) => {
     audio.src = src;
   }
 
-  audio.play();
+  const playback = audio.play();
+
+  if (playback instanceof Promise) {
+    playback
+      .then(() => app.ports.playbackSuccess.send(null))
+      // TODO: Add error handling
+      .catch(() => app.ports.playbackError.send(null));
+  }
 });
 
 app.ports.pause.subscribe(() => {
