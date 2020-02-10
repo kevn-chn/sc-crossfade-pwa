@@ -12,7 +12,7 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/feather-shuffle-512.png"
   },
   {
-    "revision": "1e15ae2d4ec62e04616397cdd5d5a1cb",
+    "revision": "01debc4a90f6b2c164c2c41c41a814e5",
     "url": "/sc-crossfade-pwa/index.html"
   },
   {
@@ -20,12 +20,12 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/manifest.json"
   },
   {
-    "revision": "3bf1ae99b8f1fe70cbc9",
+    "revision": "5b4e52786c1bcee32d40",
     "url": "/sc-crossfade-pwa/static/css/main.6496385d.chunk.css"
   },
   {
-    "revision": "3bf1ae99b8f1fe70cbc9",
-    "url": "/sc-crossfade-pwa/static/js/main.3bf1ae99.chunk.js"
+    "revision": "5b4e52786c1bcee32d40",
+    "url": "/sc-crossfade-pwa/static/js/main.5b4e5278.chunk.js"
   },
   {
     "revision": "a7be404408468aec4d11",
