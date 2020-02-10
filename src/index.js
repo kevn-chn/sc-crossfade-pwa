@@ -17,20 +17,28 @@ const app = Elm.Main.init({
 serviceWorker.unregister();
 
 // Ports for Web Audio API playback
-let audio = new Audio();
-audio.controls = true;
+let audio = initAudio();
+let prevAudio;
 
-audio.onended = () => {
-  app.ports.end.send(null);
-};
+function initAudio() {
+  const newAudio = new Audio();
+  newAudio.controls = true;
 
-app.ports.play.subscribe((src) => {
+  newAudio.onended = () => {
+    app.ports.end.send(null);
+  };
+
+  return newAudio;
+}
+
+function initPlayback(src) {
   if (src !== audio.src) {
     audio.pause();
     audio.src = src;
   }
 
   const playback = audio.play();
+  if (prevAudio) prevAudio.play();
 
   if (playback instanceof Promise) {
     playback
@@ -38,12 +46,47 @@ app.ports.play.subscribe((src) => {
       // TODO: Add error handling
       .catch(() => app.ports.playbackError.send(null));
   }
+}
+
+function resetPrevAudio() {
+  // Ensure that seek clears audio transition
+  if (prevAudio) {
+    prevAudio.pause();
+    prevAudio = undefined;
+    audio.volume = 1;
+  }
+}
+
+app.ports.play.subscribe((src) => {
+  resetPrevAudio();
+  initPlayback(src);
 });
+
+app.ports.resume.subscribe(initPlayback);
 
 app.ports.pause.subscribe(() => {
   audio.pause();
+  if (prevAudio) prevAudio.pause();
 });
 
 app.ports.seek.subscribe((time) => {
+  resetPrevAudio();
   audio.currentTime = time / 1000;
+});
+
+app.ports.fadeInNextTrack.subscribe((src) => {
+  prevAudio = audio;
+  prevAudio.onended = null;
+  audio = initAudio();
+  audio.volume = 0;
+
+  initPlayback(src);
+});
+
+app.ports.volumeFade.subscribe((amount) => {
+  if (!prevAudio || audio.volume >= 1) return;
+
+  const volume = Math.min(1, audio.volume + amount);
+  audio.volume = volume;
+  prevAudio.volume = 1 - volume;
 });

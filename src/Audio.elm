@@ -10,6 +10,9 @@ port playbackSuccess : (() -> msg) -> Sub msg
 port playbackError : (() -> msg) -> Sub msg
 
 
+port resume : String -> Cmd msg
+
+
 port pause : () -> Cmd msg
 
 
@@ -17,6 +20,12 @@ port stop : () -> Cmd msg
 
 
 port seek : Int -> Cmd msg
+
+
+port fadeInNextTrack : String -> Cmd msg
+
+
+port volumeFade : Float -> Cmd msg
 
 
 port end : (() -> msg) -> Sub msg

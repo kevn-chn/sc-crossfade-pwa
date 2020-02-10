@@ -210,11 +210,38 @@ type Msg
     | ResumeTrack
     | SeekTrack String
     | SkipBack
+    | FadeInNextTrack
     | EndTrack
     | PlayFromPlaylist Int PlaylistInfo
     | TogglePlaylistAccordion Int
     | Tick
     | NoOp
+
+
+initPlayback : Model -> Int -> (String -> Cmd Msg) -> ( Model, Cmd Msg )
+initPlayback model trackIndex playCmd =
+    case Array.get trackIndex model.player.tracks of
+        Just track ->
+            let
+                { flags, player } =
+                    model
+
+                updated =
+                    { player
+                        | currentIndex = trackIndex
+                        , currentTrack = track
+                        , elapsedTime = 0
+                        , isPlaying = False
+                    }
+            in
+            if track == player.currentTrack then
+                ( model, Cmd.none )
+
+            else
+                ( { model | player = updated }, playCmd (Api.addQuery track.stream_url flags) )
+
+        Nothing ->
+            ( model, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -237,23 +264,7 @@ update msg model =
             ( model, Cmd.none )
 
         PlayTrack trackIndex ->
-            case Array.get trackIndex model.player.tracks of
-                Just track ->
-                    let
-                        { flags, player } =
-                            model
-
-                        updated =
-                            { player | currentIndex = trackIndex, currentTrack = track, elapsedTime = 0, isPlaying = False }
-                    in
-                    if track == player.currentTrack then
-                        ( model, Cmd.none )
-
-                    else
-                        ( { model | player = updated }, Audio.play (Api.addQuery track.stream_url flags) )
-
-                Nothing ->
-                    ( model, Cmd.none )
+            initPlayback model trackIndex Audio.play
 
         PlaybackSuccess ->
             let
@@ -284,7 +295,7 @@ update msg model =
                 { flags, player } =
                     model
             in
-            ( model, Audio.play (Api.addQuery player.currentTrack.stream_url flags) )
+            ( model, Audio.resume (Api.addQuery player.currentTrack.stream_url flags) )
 
         SeekTrack valueString ->
             case String.toInt valueString of
@@ -309,7 +320,17 @@ update msg model =
                 update (SeekTrack "0") model
 
             else
-                update (PlayTrack <| model.player.currentIndex - 1) model
+                initPlayback model (model.player.currentIndex - 1) Audio.play
+
+        FadeInNextTrack ->
+            let
+                { player } =
+                    model
+
+                nextIndex =
+                    player.currentIndex + 1
+            in
+            initPlayback model nextIndex Audio.fadeInNextTrack
 
         EndTrack ->
             let
@@ -323,7 +344,7 @@ update msg model =
                     { player | elapsedTime = 0, isPlaying = False }
             in
             if nextIndex < Array.length player.tracks then
-                update (PlayTrack nextIndex) model
+                initPlayback { model | player = updated } nextIndex Audio.play
 
             else
                 ( { model | player = updated }, Cmd.none )
@@ -339,7 +360,7 @@ update msg model =
                 updated =
                     { player | tracks = tracks }
             in
-            update (PlayTrack trackIndex) { model | player = updated }
+            initPlayback { model | player = updated } trackIndex Audio.play
 
         TogglePlaylistAccordion id ->
             let
@@ -362,22 +383,40 @@ update msg model =
                     model
 
                 elapsedTime =
-                    player.elapsedTime + 200
+                    player.elapsedTime + tickAmount
 
                 updated =
                     { player | elapsedTime = elapsedTime }
+
+                duration =
+                    player.currentTrack.duration
             in
-            ( { model | player = updated }, Cmd.none )
+            if (duration - elapsedTime) < fadeTime then
+                update FadeInNextTrack { model | player = updated }
+
+            else if elapsedTime < fadeTime then
+                ( { model | player = updated }, Audio.volumeFade <| tickAmount / fadeTime )
+
+            else
+                ( { model | player = updated }, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
+
+
+fadeTime =
+    6000
+
+
+tickAmount =
+    200
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ if model.player.isPlaying then
-            every 200 <| always Tick
+            every tickAmount <| always Tick
 
           else
             Sub.none
