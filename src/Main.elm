@@ -8,7 +8,7 @@ import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
 import Html.Attributes as Attr exposing (class, disabled, href, rel, src, target, title, type_)
-import Html.Events exposing (onClick, onInput, stopPropagationOn)
+import Html.Events exposing (on, onClick, onInput, stopPropagationOn, targetValue)
 import Http
 import Json.Decode as Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as Pipeline exposing (optional, required)
@@ -62,8 +62,10 @@ type alias Player =
     { currentTrack : TrackInfo
     , currentIndex : Int
     , elapsedTime : Int
+    , displayTime : Int
     , tracks : Array TrackInfo
     , isPlaying : Bool
+    , isSeeking : Bool
     }
 
 
@@ -100,8 +102,10 @@ defaultPlayer =
     { currentTrack = defaultTrackInfo
     , currentIndex = 0
     , elapsedTime = 0
+    , displayTime = 0
     , tracks = Array.empty
     , isPlaying = False
+    , isSeeking = False
     }
 
 
@@ -208,8 +212,9 @@ type Msg
     | PlaybackError
     | PauseTrack
     | ResumeTrack
-    | SeekTrack String
-    | MediaSeekTrack Int
+    | SeekTrackStart String
+    | SeekTrackRelease String
+    | SeekTrack Int
     | SkipBack
     | FadeInNextTrack
     | NextTrack
@@ -231,6 +236,7 @@ initPlayback model trackIndex isFadeIn =
                         | currentIndex = trackIndex
                         , currentTrack = track
                         , elapsedTime = 0
+                        , displayTime = 0
                         , isPlaying = False
                     }
 
@@ -324,7 +330,7 @@ update msg model =
         ResumeTrack ->
             ( model, Audio.resume () )
 
-        SeekTrack valueString ->
+        SeekTrackStart valueString ->
             case String.toInt valueString of
                 Just value ->
                     let
@@ -332,29 +338,47 @@ update msg model =
                             model
 
                         newTime =
-                            value * player.currentTrack.duration // 100
+                            value * player.currentTrack.duration // 500
 
                         updated =
-                            { player | elapsedTime = newTime }
+                            { player | displayTime = newTime, isSeeking = True }
+                    in
+                    ( { model | player = updated }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        SeekTrackRelease valueString ->
+            case String.toInt valueString of
+                Just value ->
+                    let
+                        { player } =
+                            model
+
+                        newTime =
+                            value * player.currentTrack.duration // 500
+
+                        updated =
+                            { player | elapsedTime = newTime, displayTime = newTime, isSeeking = False }
                     in
                     ( { model | player = updated }, Audio.seek newTime )
 
                 Nothing ->
                     ( model, Cmd.none )
 
-        MediaSeekTrack newTime ->
+        SeekTrack newTime ->
             let
                 { player } =
                     model
 
                 updated =
-                    { player | elapsedTime = newTime }
+                    { player | elapsedTime = newTime, displayTime = newTime }
             in
             ( { model | player = updated }, Audio.seek newTime )
 
         SkipBack ->
             if model.player.currentIndex == 0 || model.player.elapsedTime > 3000 then
-                update (SeekTrack "0") model
+                update (SeekTrack 0) model
 
             else
                 initPlayback model (model.player.currentIndex - 1) False
@@ -378,7 +402,7 @@ update msg model =
                     player.currentIndex + 1
 
                 updated =
-                    { player | elapsedTime = 0, isPlaying = False }
+                    { player | elapsedTime = 0, displayTime = 0, isPlaying = False }
             in
             initPlayback { model | player = updated } nextIndex False
 
@@ -405,8 +429,15 @@ update msg model =
                 elapsedTime =
                     player.elapsedTime + tickAmount
 
+                displayTime =
+                    if not player.isSeeking then
+                        elapsedTime
+
+                    else
+                        player.displayTime
+
                 updated =
-                    { player | elapsedTime = elapsedTime }
+                    { player | elapsedTime = elapsedTime, displayTime = displayTime }
 
                 duration =
                     player.currentTrack.duration
@@ -445,8 +476,8 @@ subscriptions model =
         , Audio.playbackError (always PlaybackError)
         , Audio.mediaPlay (always ResumeTrack)
         , Audio.mediaPause (always PauseTrack)
-        , Audio.mediaSeekBackward (\t -> MediaSeekTrack t)
-        , Audio.mediaSeekForward (\t -> MediaSeekTrack t)
+        , Audio.mediaSeekBackward (\t -> SeekTrack t)
+        , Audio.mediaSeekForward (\t -> SeekTrack t)
         , Audio.mediaPreviousTrack (always SkipBack)
         , Audio.mediaNextTrack (always NextTrack)
         ]
@@ -473,6 +504,11 @@ onClickStopPropagation msg =
         (Decode.succeed ( msg, True ))
 
 
+onCustomInput : String -> (String -> msg) -> Attribute msg
+onCustomInput event message =
+    on event <| Decode.map message targetValue
+
+
 view : Model -> Html Msg
 view { player, playlists, playlistUIById, user } =
     div [ class "max-w-2xl mx-auto mb-24" ]
@@ -493,7 +529,7 @@ view { player, playlists, playlistUIById, user } =
 viewPlayer : Player -> Html Msg
 viewPlayer player =
     let
-        { currentIndex, currentTrack, elapsedTime, tracks, isPlaying } =
+        { currentIndex, currentTrack, displayTime, tracks, isPlaying } =
             player
 
         hasTrack =
@@ -569,9 +605,11 @@ viewPlayer player =
                             [ class "w-full"
                             , type_ "range"
                             , Attr.min "0"
-                            , Attr.max "100"
-                            , Attr.value <| String.fromInt <| player.elapsedTime * 100 // currentTrack.duration
-                            , onInput SeekTrack
+                            , Attr.max "500"
+                            , Attr.value <| String.fromInt <| displayTime * 500 // currentTrack.duration
+                            , onInput SeekTrackStart
+                            , onCustomInput "mouseup" SeekTrackRelease
+                            , onCustomInput "touchend" SeekTrackRelease
                             ]
                             []
                         ]
@@ -580,7 +618,7 @@ viewPlayer player =
               else
                 p [ class "ml-2" ] [ text "Select a Track" ]
             , if hasTrack then
-                p [ class "flex-none text-sm" ] [ text <| formatTime elapsedTime ++ " / " ++ formatTime currentTrack.duration ]
+                p [ class "flex-none text-sm" ] [ text <| formatTime displayTime ++ " / " ++ formatTime currentTrack.duration ]
 
               else
                 text ""
