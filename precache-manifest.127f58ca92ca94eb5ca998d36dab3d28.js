@@ -1,9 +1,5 @@
 self.__precacheManifest = (self.__precacheManifest || []).concat([
   {
-    "revision": "194577a7e20bdcc7afbb718f502c134c",
-    "url": "/sc-crossfade-pwa/.DS_Store"
-  },
-  {
     "revision": "acca44b7a46c11dc466dd7de95bced15",
     "url": "/sc-crossfade-pwa/favicon.ico"
   },
