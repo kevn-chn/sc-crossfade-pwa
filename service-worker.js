@@ -14,7 +14,7 @@
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/4.3.1/workbox-sw.js");
 
 importScripts(
-  "/sc-crossfade-pwa/precache-manifest.39f48645044d82d1ab3e9f9518d38227.js"
+  "/sc-crossfade-pwa/precache-manifest.6a5da8c31645acfecbdf2186ef2363cd.js"
 );
 
 workbox.core.skipWaiting();

@@ -1,27 +1,31 @@
 self.__precacheManifest = (self.__precacheManifest || []).concat([
   {
+    "revision": "194577a7e20bdcc7afbb718f502c134c",
+    "url": "/sc-crossfade-pwa/.DS_Store"
+  },
+  {
     "revision": "987da976a8b2a4169346a497ba84749d",
     "url": "/sc-crossfade-pwa/favicon.ico"
   },
   {
-    "revision": "7cb68849efc3a0c4c70edbf21b83eef6",
+    "revision": "fbb6a02d25d0283fafdfd1b9e10a26f2",
     "url": "/sc-crossfade-pwa/index.html"
   },
   {
-    "revision": "6ead519905b7b907c00965be37dd5cd7",
-    "url": "/sc-crossfade-pwa/logo.svg"
-  },
-  {
-    "revision": "1c82903c2994c2507b385b9042bbfac5",
+    "revision": "842404c12436403846d686933de335ff",
     "url": "/sc-crossfade-pwa/manifest.json"
   },
   {
-    "revision": "22bf31cd5a76a9a20101",
+    "revision": "db2a806396baa1706ed94f4cd0b29af5",
+    "url": "/sc-crossfade-pwa/shuffle.svg"
+  },
+  {
+    "revision": "0d58aff97fec99b939e3",
     "url": "/sc-crossfade-pwa/static/css/main.6496385d.chunk.css"
   },
   {
-    "revision": "22bf31cd5a76a9a20101",
-    "url": "/sc-crossfade-pwa/static/js/main.22bf31cd.chunk.js"
+    "revision": "0d58aff97fec99b939e3",
+    "url": "/sc-crossfade-pwa/static/js/main.0d58aff9.chunk.js"
   },
   {
     "revision": "a7be404408468aec4d11",
