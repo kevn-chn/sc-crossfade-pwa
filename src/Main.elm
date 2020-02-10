@@ -203,23 +203,23 @@ init flags =
 type Msg
     = GotUserInfo (Result Http.Error User)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
-    | PlayTrack Int
+    | PlayTrack Int PlaylistInfo
     | PlaybackSuccess
     | PlaybackError
     | PauseTrack
     | ResumeTrack
     | SeekTrack String
+    | MediaSeekTrack Int
     | SkipBack
     | FadeInNextTrack
-    | EndTrack
-    | PlayFromPlaylist Int PlaylistInfo
+    | NextTrack
     | TogglePlaylistAccordion Int
     | Tick
     | NoOp
 
 
-initPlayback : Model -> Int -> (String -> Cmd Msg) -> ( Model, Cmd Msg )
-initPlayback model trackIndex playCmd =
+initPlayback : Model -> Int -> Bool -> ( Model, Cmd Msg )
+initPlayback model trackIndex isFadeIn =
     case Array.get trackIndex model.player.tracks of
         Just track ->
             let
@@ -233,12 +233,33 @@ initPlayback model trackIndex playCmd =
                         , elapsedTime = 0
                         , isPlaying = False
                     }
+
+                playCmd =
+                    if isFadeIn then
+                        Audio.fadeInNextTrack
+
+                    else
+                        Audio.play
+
+                metadata =
+                    { title = track.title
+                    , artist = track.user.username
+                    , artwork =
+                        [ { src = String.replace "-large" "-t300x300" track.artwork_url, sizes = "300x300" }
+                        , { src = String.replace "-large" "-t500x500" track.artwork_url, sizes = "500x500" }
+                        ]
+                    }
             in
             if track == player.currentTrack then
                 ( model, Cmd.none )
 
             else
-                ( { model | player = updated }, playCmd (Api.addQuery track.stream_url flags) )
+                ( { model | player = updated }
+                , Cmd.batch
+                    [ playCmd (Api.addQuery track.stream_url flags)
+                    , Audio.setTrackMetadata metadata
+                    ]
+                )
 
         Nothing ->
             ( model, Cmd.none )
@@ -263,8 +284,18 @@ update msg model =
         GotPlaylistsCollection (Err _) ->
             ( model, Cmd.none )
 
-        PlayTrack trackIndex ->
-            initPlayback model trackIndex Audio.play
+        PlayTrack trackIndex playlist ->
+            let
+                { player } =
+                    model
+
+                tracks =
+                    Array.fromList playlist.tracks
+
+                updated =
+                    { player | tracks = tracks }
+            in
+            initPlayback { model | player = updated } trackIndex False
 
         PlaybackSuccess ->
             let
@@ -291,11 +322,7 @@ update msg model =
             ( { model | player = updated }, Audio.pause () )
 
         ResumeTrack ->
-            let
-                { flags, player } =
-                    model
-            in
-            ( model, Audio.resume (Api.addQuery player.currentTrack.stream_url flags) )
+            ( model, Audio.resume () )
 
         SeekTrack valueString ->
             case String.toInt valueString of
@@ -315,12 +342,22 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        MediaSeekTrack newTime ->
+            let
+                { player } =
+                    model
+
+                updated =
+                    { player | elapsedTime = newTime }
+            in
+            ( { model | player = updated }, Audio.seek newTime )
+
         SkipBack ->
             if model.player.currentIndex == 0 || model.player.elapsedTime > 3000 then
                 update (SeekTrack "0") model
 
             else
-                initPlayback model (model.player.currentIndex - 1) Audio.play
+                initPlayback model (model.player.currentIndex - 1) False
 
         FadeInNextTrack ->
             let
@@ -330,9 +367,9 @@ update msg model =
                 nextIndex =
                     player.currentIndex + 1
             in
-            initPlayback model nextIndex Audio.fadeInNextTrack
+            initPlayback model nextIndex True
 
-        EndTrack ->
+        NextTrack ->
             let
                 { player } =
                     model
@@ -343,24 +380,7 @@ update msg model =
                 updated =
                     { player | elapsedTime = 0, isPlaying = False }
             in
-            if nextIndex < Array.length player.tracks then
-                initPlayback { model | player = updated } nextIndex Audio.play
-
-            else
-                ( { model | player = updated }, Cmd.none )
-
-        PlayFromPlaylist trackIndex playlist ->
-            let
-                { player } =
-                    model
-
-                tracks =
-                    Array.fromList playlist.tracks
-
-                updated =
-                    { player | tracks = tracks }
-            in
-            initPlayback { model | player = updated } trackIndex Audio.play
+            initPlayback { model | player = updated } nextIndex False
 
         TogglePlaylistAccordion id ->
             let
@@ -420,9 +440,15 @@ subscriptions model =
 
           else
             Sub.none
-        , Audio.end (always EndTrack)
+        , Audio.end (always NextTrack)
         , Audio.playbackSuccess (always PlaybackSuccess)
         , Audio.playbackError (always PlaybackError)
+        , Audio.mediaPlay (always ResumeTrack)
+        , Audio.mediaPause (always PauseTrack)
+        , Audio.mediaSeekBackward (\t -> MediaSeekTrack t)
+        , Audio.mediaSeekForward (\t -> MediaSeekTrack t)
+        , Audio.mediaPreviousTrack (always SkipBack)
+        , Audio.mediaNextTrack (always NextTrack)
         ]
 
 
@@ -519,7 +545,7 @@ viewPlayer player =
                     ]
                 , button
                     [ class <| "h-6 ml-2" ++ (disabledClass <| currentIndex + 1 >= Array.length tracks)
-                    , onClick <| PlayTrack (currentIndex + 1)
+                    , onClick NextTrack
                     , disabled <| currentIndex + 1 >= Array.length tracks
                     ]
                     [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.skipForward ]
@@ -646,7 +672,7 @@ viewTrack track trackIndex player playlist =
                 ResumeTrack
 
             else
-                PlayFromPlaylist trackIndex playlist
+                PlayTrack trackIndex playlist
     in
     button
         [ class ("flex justify-between items-center px-4 py-1 w-full hover:bg-gray-200" ++ backgroundColor)

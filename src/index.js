@@ -32,8 +32,8 @@ function initAudio() {
 }
 
 function initPlayback(src) {
-  if (src !== audio.src) {
-    audio.pause();
+  if (src && src !== audio.src) {
+    pauseAudio();
     audio.src = src;
   }
 
@@ -42,9 +42,24 @@ function initPlayback(src) {
 
   if (playback instanceof Promise) {
     playback
-      .then(() => app.ports.playbackSuccess.send(null))
+      .then(() => {
+        app.ports.playbackSuccess.send(null);
+
+        if ('mediaSession' in window.navigator) {
+          window.navigator.mediaSession.playbackState = 'playing';
+        }
+      })
       // TODO: Add error handling
       .catch(() => app.ports.playbackError.send(null));
+  }
+}
+
+function pauseAudio() {
+  audio.pause();
+  if (prevAudio) prevAudio.pause();
+
+  if ('mediaSession' in window.navigator) {
+    window.navigator.mediaSession.playbackState = 'paused';
   }
 }
 
@@ -57,6 +72,34 @@ function resetPrevAudio() {
   }
 }
 
+app.ports.setTrackMetadata.subscribe((metadata) => {
+  const skipTime = 10;
+
+  if ('mediaSession' in window.navigator) {
+    window.navigator.mediaSession.metadata = new MediaMetadata(metadata);
+    window.navigator.mediaSession.setActionHandler('play', () => {
+      app.ports.mediaPlay.send(null);
+    });
+    window.navigator.mediaSession.setActionHandler('pause', () => {
+      app.ports.mediaPause.send(null);
+    });
+    window.navigator.mediaSession.setActionHandler('seekbackward', () => {
+      const time = Math.floor(Math.max(audio.currentTime - skipTime, 0) * 1000);
+      app.ports.mediaSeekBackward.send(time);
+    });
+    window.navigator.mediaSession.setActionHandler('seekforward', () => {
+      const time = Math.floor(Math.min(audio.currentTime + skipTime, audio.duration) * 1000);
+      app.ports.mediaSeekForward.send(time);
+    });
+    window.navigator.mediaSession.setActionHandler('previoustrack', () => {
+      app.ports.mediaPreviousTrack.send(null);
+    });
+    window.navigator.mediaSession.setActionHandler('nexttrack', () => {
+      app.ports.mediaNextTrack.send(null);
+    });
+  }
+});
+
 app.ports.play.subscribe((src) => {
   resetPrevAudio();
   initPlayback(src);
@@ -64,10 +107,7 @@ app.ports.play.subscribe((src) => {
 
 app.ports.resume.subscribe(initPlayback);
 
-app.ports.pause.subscribe(() => {
-  audio.pause();
-  if (prevAudio) prevAudio.pause();
-});
+app.ports.pause.subscribe(pauseAudio);
 
 app.ports.seek.subscribe((time) => {
   resetPrevAudio();
