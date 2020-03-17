@@ -7,7 +7,7 @@ import Browser
 import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
-import Html.Attributes as Attr exposing (class, disabled, href, rel, src, target, title, type_)
+import Html.Attributes as Attr exposing (alt, class, disabled, href, rel, src, target, title, type_)
 import Html.Events exposing (on, onClick, onInput, stopPropagationOn, targetValue)
 import Http
 import Json.Decode as Decode exposing (Decoder, succeed)
@@ -22,6 +22,7 @@ type alias User =
     , id : Int
     , kind : String
     , last_modified : String
+    , permalink : String
     , permalink_url : String
     , username : String
     }
@@ -47,6 +48,12 @@ type alias PlaylistInfo =
     , user : User
     , tracks : List TrackInfo
     , waveform_url : String
+    }
+
+
+type alias Favorites =
+    { collection : List TrackInfo
+    , next_href : String
     }
 
 
@@ -128,6 +135,7 @@ defaultUser =
     , id = 0
     , kind = ""
     , last_modified = ""
+    , permalink = ""
     , permalink_url = ""
     , username = ""
     }
@@ -136,6 +144,13 @@ defaultUser =
 collectionDecoder : Decoder PlaylistsCollection
 collectionDecoder =
     Decode.list playlistDecoder
+
+
+favoritesDecoder : Decoder Favorites
+favoritesDecoder =
+    succeed Favorites
+        |> required "collection" (Decode.list trackDecoder)
+        |> optional "next_href" Decode.string ""
 
 
 playlistDecoder : Decoder PlaylistInfo
@@ -170,6 +185,7 @@ userDecoder =
         |> required "id" Decode.int
         |> required "kind" Decode.string
         |> required "last_modified" Decode.string
+        |> required "permalink" Decode.string
         |> required "permalink_url" Decode.string
         |> required "username" Decode.string
 
@@ -177,7 +193,7 @@ userDecoder =
 fetchUserInfo : Flags -> Cmd Msg
 fetchUserInfo flags =
     Http.get
-        { url = Api.url [ "users", flags.sc_user_id ] flags
+        { url = Api.url [ "users", flags.sc_user_id ] flags []
         , expect = Http.expectJson GotUserInfo userDecoder
         }
 
@@ -185,8 +201,16 @@ fetchUserInfo flags =
 fetchPlaylistsCollection : Flags -> Cmd Msg
 fetchPlaylistsCollection flags =
     Http.get
-        { url = Api.url [ "users", flags.sc_user_id, "playlists" ] flags
+        { url = Api.url [ "users", flags.sc_user_id, "playlists" ] flags []
         , expect = Http.expectJson GotPlaylistsCollection collectionDecoder
+        }
+
+
+fetchFavorites : Flags -> Cmd Msg
+fetchFavorites flags =
+    Http.get
+        { url = Api.url [ "users", flags.sc_user_id, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
+        , expect = Http.expectJson GotFavorites favoritesDecoder
         }
 
 
@@ -195,6 +219,7 @@ init flags =
     ( initialModel flags
     , Cmd.batch
         [ fetchUserInfo flags
+        , fetchFavorites flags
         , fetchPlaylistsCollection flags
         ]
     )
@@ -206,6 +231,7 @@ init flags =
 
 type Msg
     = GotUserInfo (Result Http.Error User)
+    | GotFavorites (Result Http.Error Favorites)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
     | PlayTrack Int PlaylistInfo
     | PlaybackSuccess
@@ -262,7 +288,7 @@ initPlayback model trackIndex isFadeIn =
             else
                 ( { model | player = updated }
                 , Cmd.batch
-                    [ playCmd (Api.addQuery track.stream_url flags)
+                    [ playCmd (Api.addQuery track.stream_url flags [])
                     , Audio.setTrackMetadata metadata
                     ]
                 )
@@ -280,12 +306,38 @@ update msg model =
         GotUserInfo (Err _) ->
             ( model, Cmd.none )
 
+        GotFavorites (Ok favorites) ->
+            let
+                playlistUIById =
+                    Dict.insert 0 { isOpen = False } model.playlistUIById
+
+                likes =
+                    { title = "Likes"
+                    , id = 0
+                    , duration = 0
+                    , permalink_url = model.user.permalink_url ++ "/likes"
+                    , user = model.user
+                    , tracks = favorites.collection
+                    , waveform_url = ""
+                    }
+
+                playlists =
+                    likes :: model.playlists
+            in
+            ( { model | playlists = playlists, playlistUIById = playlistUIById }, Cmd.none )
+
+        GotFavorites (Err _) ->
+            ( model, Cmd.none )
+
         GotPlaylistsCollection (Ok collection) ->
             let
                 playlistUIById =
                     Dict.fromList (List.map (\list -> ( list.id, { isOpen = False } )) collection)
+
+                playlists =
+                    List.append model.playlists collection
             in
-            ( { model | playlists = collection, playlistUIById = playlistUIById }, Cmd.none )
+            ( { model | playlists = playlists, playlistUIById = playlistUIById }, Cmd.none )
 
         GotPlaylistsCollection (Err _) ->
             ( model, Cmd.none )
@@ -509,17 +561,45 @@ onCustomInput event message =
     on event <| Decode.map message targetValue
 
 
+getTrackArtworkUrl : TrackInfo -> String
+getTrackArtworkUrl track =
+    if not (String.isEmpty track.artwork_url) then
+        track.artwork_url
+
+    else if not (String.isEmpty track.user.avatar_url) then
+        track.user.avatar_url
+
+    else
+        ""
+
+
 view : Model -> Html Msg
 view { player, playlists, playlistUIById, user } =
     div [ class "max-w-2xl mx-auto mb-24" ]
-        [ h1 [ class "p-4 text-2xl" ]
-            [ a
-                [ class "hover:underline"
+        [ h1 [ class "p-2 flex items-center" ]
+            [ div
+                [ class
+                    "inline-block rounded-full overflow-hidden relative w-6 h-6 mr-2 bg-gray-300"
+                ]
+                [ if not (String.isEmpty user.avatar_url) then
+                    img
+                        [ class "absolute h-full"
+                        , src (String.replace "-large" "-small" user.avatar_url)
+                        , alt "User Avatar"
+                        ]
+                        []
+
+                  else
+                    text ""
+                ]
+            , a
+                [ class "hover:underline text-xl mr-2"
                 , href user.permalink_url
                 , rel "noopener noreferrer"
                 , target "_blank"
                 ]
-                [ text user.username ]
+                [ text user.permalink ]
+            , span [ class "text-sm font-light" ] [ text user.username ]
             ]
         , viewPlaylists playlists playlistUIById player
         , viewPlayer player
@@ -556,6 +636,9 @@ viewPlayer player =
 
             else
                 ResumeTrack
+
+        artwork_url =
+            getTrackArtworkUrl currentTrack
     in
     section [ class "fixed h-16 bottom-0 left-0 w-screen bg-black text-white" ]
         [ div [ class ("flex items-center max-w-2xl mx-auto h-full p-4" ++ justify) ]
@@ -589,10 +672,10 @@ viewPlayer player =
             , if hasTrack then
                 div [ class "flex flex-grow min-w-0 mx-4 md:mx-8 justify-between items-center" ]
                     [ div [ class "hidden sm:block flex-none relative w-8 h-8 mr-4 bg-gray-300" ]
-                        [ if String.length currentTrack.artwork_url > 0 then
+                        [ if not (String.isEmpty artwork_url) then
                             img
                                 [ class "absolute h-full"
-                                , src (String.replace "-large" "-small" currentTrack.artwork_url)
+                                , src (String.replace "-large" "-small" artwork_url)
                                 ]
                                 []
 
@@ -646,7 +729,11 @@ viewPlaylists playlists playlistUIById player =
                         , onClick (TogglePlaylistAccordion playlist.id)
                         ]
                         [ span [ class "w-full text-left" ] [ text playlist.title ]
-                        , span [ class "ml-2 text-base font-normal" ] [ text <| formatTime playlist.duration ]
+                        , if playlist.duration > 0 then
+                            span [ class "ml-2 text-base font-normal" ] [ text <| formatTime playlist.duration ]
+
+                          else
+                            text ""
                         , a
                             [ class "h-6 ml-2"
                             , href playlist.permalink_url
@@ -711,16 +798,19 @@ viewTrack track trackIndex player playlist =
 
             else
                 PlayTrack trackIndex playlist
+
+        artwork_url =
+            getTrackArtworkUrl track
     in
     button
         [ class ("flex justify-between items-center px-4 py-1 w-full hover:bg-gray-200" ++ backgroundColor)
         , onClick playMsg
         ]
         [ div [ class "relative flex-none w-6 h-6 mr-2 bg-gray-300" ]
-            [ if String.length track.artwork_url > 0 then
+            [ if not (String.isEmpty artwork_url) then
                 img
                     [ class ("absolute h-full" ++ opacity)
-                    , src (String.replace "-large" "-small" track.artwork_url)
+                    , src (String.replace "-large" "-small" artwork_url)
                     ]
                     []
 
