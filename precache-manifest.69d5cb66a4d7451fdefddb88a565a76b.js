@@ -12,7 +12,7 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/feather-shuffle-512.png"
   },
   {
-    "revision": "242c9d4c0bcdaa23f99794a6426988d8",
+    "revision": "d8755403b557f16a05370076fd5500d9",
     "url": "/sc-crossfade-pwa/index.html"
   },
   {
@@ -20,19 +20,19 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/sc-crossfade-pwa/manifest.json"
   },
   {
-    "revision": "dff1a5bb70819980a370",
-    "url": "/sc-crossfade-pwa/static/css/main.6496385d.chunk.css"
+    "revision": "ede99aae8cce55afd97d",
+    "url": "/sc-crossfade-pwa/static/css/main.a31b58fb.chunk.css"
   },
   {
-    "revision": "dff1a5bb70819980a370",
-    "url": "/sc-crossfade-pwa/static/js/main.dff1a5bb.chunk.js"
+    "revision": "ede99aae8cce55afd97d",
+    "url": "/sc-crossfade-pwa/static/js/main.ede99aae.chunk.js"
   },
   {
     "revision": "a7be404408468aec4d11",
     "url": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js"
   },
   {
-    "revision": "716667660ec97649ae4a",
-    "url": "/sc-crossfade-pwa/static/js/vendors~main.71666766.chunk.js"
+    "revision": "3ca81432027bbb7b376c",
+    "url": "/sc-crossfade-pwa/static/js/vendors~main.3ca81432.chunk.js"
   }
 ]);
