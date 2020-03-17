@@ -7,7 +7,7 @@ import Browser
 import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
-import Html.Attributes as Attr exposing (alt, class, disabled, href, rel, src, target, title, type_)
+import Html.Attributes as Attr exposing (alt, class, disabled, href, rel, src, target, title)
 import Html.Events exposing (on, onClick, onInput, stopPropagationOn, targetValue)
 import Http
 import Json.Decode as Decode exposing (Decoder, succeed)
@@ -76,6 +76,13 @@ type alias Player =
     }
 
 
+type alias UserSearch =
+    { isOpen : Bool
+    , input : String
+    , results : List User
+    }
+
+
 
 ---- MODEL ----
 
@@ -86,6 +93,7 @@ type alias Model =
     , playlists : List PlaylistInfo
     , playlistUIById : Dict Int Accordion
     , user : User
+    , userSearch : UserSearch
     }
 
 
@@ -96,6 +104,7 @@ initialModel flags =
     , playlists = []
     , playlistUIById = Dict.empty
     , user = defaultUser
+    , userSearch = defaultUserSearch
     }
 
 
@@ -141,9 +150,12 @@ defaultUser =
     }
 
 
-collectionDecoder : Decoder PlaylistsCollection
-collectionDecoder =
-    Decode.list playlistDecoder
+defaultUserSearch : UserSearch
+defaultUserSearch =
+    { isOpen = False
+    , input = ""
+    , results = []
+    }
 
 
 favoritesDecoder : Decoder Favorites
@@ -190,27 +202,35 @@ userDecoder =
         |> required "username" Decode.string
 
 
-fetchUserInfo : Flags -> Cmd Msg
-fetchUserInfo flags =
+fetchUserInfo : String -> Flags -> Cmd Msg
+fetchUserInfo userId flags =
     Http.get
-        { url = Api.url [ "users", flags.sc_user_id ] flags []
+        { url = Api.url [ "users", userId ] flags []
         , expect = Http.expectJson GotUserInfo userDecoder
         }
 
 
-fetchPlaylistsCollection : Flags -> Cmd Msg
-fetchPlaylistsCollection flags =
+fetchPlaylistsCollection : String -> Flags -> Cmd Msg
+fetchPlaylistsCollection userId flags =
     Http.get
-        { url = Api.url [ "users", flags.sc_user_id, "playlists" ] flags []
-        , expect = Http.expectJson GotPlaylistsCollection collectionDecoder
+        { url = Api.url [ "users", userId, "playlists" ] flags []
+        , expect = Http.expectJson GotPlaylistsCollection (Decode.list playlistDecoder)
         }
 
 
-fetchFavorites : Flags -> Cmd Msg
-fetchFavorites flags =
+fetchFavorites : String -> Flags -> Cmd Msg
+fetchFavorites userId flags =
     Http.get
-        { url = Api.url [ "users", flags.sc_user_id, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
+        { url = Api.url [ "users", userId, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
         , expect = Http.expectJson GotFavorites favoritesDecoder
+        }
+
+
+searchUsers : String -> Flags -> Cmd Msg
+searchUsers searchTerm flags =
+    Http.get
+        { url = Api.url [ "users" ] flags [ ( "q", searchTerm ) ]
+        , expect = Http.expectJson GotUserSearch (Decode.list userDecoder)
         }
 
 
@@ -218,9 +238,9 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( initialModel flags
     , Cmd.batch
-        [ fetchUserInfo flags
-        , fetchFavorites flags
-        , fetchPlaylistsCollection flags
+        [ fetchUserInfo flags.sc_user_id flags
+        , fetchFavorites flags.sc_user_id flags
+        , fetchPlaylistsCollection flags.sc_user_id flags
         ]
     )
 
@@ -233,6 +253,7 @@ type Msg
     = GotUserInfo (Result Http.Error User)
     | GotFavorites (Result Http.Error Favorites)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
+    | GotUserSearch (Result Http.Error (List User))
     | PlayTrack Int PlaylistInfo
     | PlaybackSuccess
     | PlaybackError
@@ -244,7 +265,10 @@ type Msg
     | SkipBack
     | FadeInNextTrack
     | NextTrack
+    | SearchUsers String
+    | SwitchUser User
     | TogglePlaylistAccordion Int
+    | ToggleUserSearch
     | Tick
     | NoOp
 
@@ -340,6 +364,19 @@ update msg model =
             ( { model | playlists = playlists, playlistUIById = playlistUIById }, Cmd.none )
 
         GotPlaylistsCollection (Err _) ->
+            ( model, Cmd.none )
+
+        GotUserSearch (Ok results) ->
+            let
+                { userSearch } =
+                    model
+
+                updated =
+                    { userSearch | results = results }
+            in
+            ( { model | userSearch = updated }, Cmd.none )
+
+        GotUserSearch (Err _) ->
             ( model, Cmd.none )
 
         PlayTrack trackIndex playlist ->
@@ -458,6 +495,39 @@ update msg model =
             in
             initPlayback { model | player = updated } nextIndex False
 
+        SearchUsers input ->
+            let
+                { flags, userSearch } =
+                    model
+
+                updated =
+                    if String.isEmpty input then
+                        { userSearch | input = "", results = [] }
+
+                    else
+                        { userSearch | input = input }
+
+                searchCmd =
+                    if String.isEmpty input then
+                        Cmd.none
+
+                    else
+                        searchUsers input flags
+            in
+            ( { model | userSearch = updated }, searchCmd )
+
+        SwitchUser user ->
+            let
+                id =
+                    String.fromInt user.id
+            in
+            ( { model | player = defaultPlayer, playlists = [], playlistUIById = Dict.empty, user = user, userSearch = defaultUserSearch }
+            , Cmd.batch
+                [ fetchFavorites id model.flags
+                , fetchPlaylistsCollection id model.flags
+                ]
+            )
+
         TogglePlaylistAccordion id ->
             let
                 accordion =
@@ -472,6 +542,16 @@ update msg model =
                     Dict.insert id accordion model.playlistUIById
             in
             ( { model | playlistUIById = updated }, Cmd.none )
+
+        ToggleUserSearch ->
+            let
+                { userSearch } =
+                    model
+
+                updated =
+                    { userSearch | isOpen = not userSearch.isOpen }
+            in
+            ( { model | userSearch = updated }, Cmd.none )
 
         Tick ->
             let
@@ -574,33 +654,74 @@ getTrackArtworkUrl track =
 
 
 view : Model -> Html Msg
-view { player, playlists, playlistUIById, user } =
+view { player, playlists, playlistUIById, user, userSearch } =
     div [ class "max-w-2xl mx-auto mb-24" ]
-        [ h1 [ class "p-2 flex items-center" ]
-            [ div
-                [ class
-                    "inline-block rounded-full overflow-hidden relative w-6 h-6 mr-2 bg-gray-300"
+        [ div [ class "p-2 flex justify-between" ]
+            [ h1 [ class "flex items-center" ]
+                [ div
+                    [ class
+                        "inline-block rounded-full overflow-hidden relative w-6 h-6 mr-2 bg-gray-300"
+                    ]
+                    [ if not (String.isEmpty user.avatar_url) then
+                        img
+                            [ class "absolute h-full"
+                            , src (String.replace "-large" "-small" user.avatar_url)
+                            , alt "User Avatar"
+                            ]
+                            []
+
+                      else
+                        text ""
+                    ]
+                , a
+                    [ class "hover:underline text-xl mr-2"
+                    , href user.permalink_url
+                    , rel "noopener noreferrer"
+                    , target "_blank"
+                    ]
+                    [ text user.permalink ]
+                , span [ class "text-sm font-light" ] [ text user.username ]
                 ]
-                [ if not (String.isEmpty user.avatar_url) then
-                    img
-                        [ class "absolute h-full"
-                        , src (String.replace "-large" "-small" user.avatar_url)
-                        , alt "User Avatar"
-                        ]
-                        []
+            , button
+                [ class "hover:bg-gray-200 p-2 border rounded-lg text-xs"
+                , onClick ToggleUserSearch
+                ]
+                [ if userSearch.isOpen then
+                    text "Collapse User Search"
 
                   else
-                    text ""
+                    text "Switch User"
                 ]
-            , a
-                [ class "hover:underline text-xl mr-2"
-                , href user.permalink_url
-                , rel "noopener noreferrer"
-                , target "_blank"
-                ]
-                [ text user.permalink ]
-            , span [ class "text-sm font-light" ] [ text user.username ]
             ]
+        , if userSearch.isOpen then
+            div [ class "mb-4 relative" ]
+                [ input
+                    [ class "border border-black p-2 w-full"
+                    , Attr.placeholder "Search Users"
+                    , onInput SearchUsers
+                    , Attr.type_ "text"
+                    , Attr.value userSearch.input
+                    ]
+                    []
+                , ul [ class "bg-white absolute border w-full z-10 shadow-md" ]
+                    (List.map
+                        (\result ->
+                            li []
+                                [ button
+                                    [ class "hover:bg-gray-200 w-full p-2 text-left"
+                                    , onClick (SwitchUser result)
+                                    ]
+                                    [ span [ class "mr-2" ] [ text result.permalink ]
+                                    , span [ class "text-sm font-light" ] [ text result.username ]
+                                    ]
+                                ]
+                        )
+                        userSearch.results
+                    )
+                ]
+
+          else
+            text ""
         , viewPlaylists playlists playlistUIById player
         , viewPlayer player
         ]
@@ -686,7 +807,7 @@ viewPlayer player =
                         [ p [ class "text-sm truncate" ] [ text <| currentTrack.user.username ++ " - " ++ currentTrack.title ]
                         , input
                             [ class "w-full"
-                            , type_ "range"
+                            , Attr.type_ "range"
                             , Attr.min "0"
                             , Attr.max "500"
                             , Attr.value <| String.fromInt <| displayTime * 500 // currentTrack.duration
@@ -745,11 +866,15 @@ viewPlaylists playlists playlistUIById player =
                             [ Icons.toHtml [] Icons.externalLink ]
                         ]
                     , if isOpen then
-                        ul [ class "pb-4" ]
-                            (List.indexedMap
-                                (\index track -> li [] [ viewTrack track index player playlist ])
-                                playlist.tracks
-                            )
+                        if not (List.isEmpty playlist.tracks) then
+                            ul [ class "pb-4" ]
+                                (List.indexedMap
+                                    (\index track -> li [] [ viewTrack track index player playlist ])
+                                    playlist.tracks
+                                )
+
+                        else
+                            p [ class "px-4 py-2" ] [ text "No tracks available." ]
 
                       else
                         text ""
