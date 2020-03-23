@@ -655,8 +655,8 @@ getTrackArtworkUrl track =
 
 view : Model -> Html Msg
 view { player, playlists, playlistUIById, user, userSearch } =
-    div [ class "max-w-2xl mx-auto mb-24" ]
-        [ div [ class "p-2 flex justify-between" ]
+    div [ class "max-w-screen-sm mx-auto mb-24" ]
+        [ div [ class "p-4 sm:px-0 flex justify-between" ]
             [ h1 [ class "flex items-center" ]
                 [ div
                     [ class
@@ -683,7 +683,7 @@ view { player, playlists, playlistUIById, user, userSearch } =
                 , span [ class "text-sm font-light" ] [ text user.username ]
                 ]
             , button
-                [ class "hover:bg-gray-200 p-2 border rounded-lg text-xs"
+                [ class "border rounded hover:bg-gray-200 p-2 text-xs"
                 , onClick ToggleUserSearch
                 ]
                 [ if userSearch.isOpen then
@@ -694,30 +694,34 @@ view { player, playlists, playlistUIById, user, userSearch } =
                 ]
             ]
         , if userSearch.isOpen then
-            div [ class "mb-4 relative" ]
+            div [ class "mx-4 sm:mx-0 mb-4 relative" ]
                 [ input
-                    [ class "border border-black p-2 w-full"
+                    [ class "border rounded p-2 w-full"
                     , Attr.placeholder "Search Users"
                     , onInput SearchUsers
                     , Attr.type_ "text"
                     , Attr.value userSearch.input
                     ]
                     []
-                , ul [ class "bg-white absolute border w-full z-10 shadow-md" ]
-                    (List.map
-                        (\result ->
-                            li []
-                                [ button
-                                    [ class "hover:bg-gray-200 w-full p-2 text-left"
-                                    , onClick (SwitchUser result)
+                , if List.length userSearch.results > 0 then
+                    ul [ class "bg-white absolute border rounded w-full z-10 shadow-md" ]
+                        (List.map
+                            (\result ->
+                                li []
+                                    [ button
+                                        [ class "hover:bg-gray-200 w-full p-2 text-left"
+                                        , onClick (SwitchUser result)
+                                        ]
+                                        [ span [ class "mr-2" ] [ text result.permalink ]
+                                        , span [ class "text-sm font-light" ] [ text result.username ]
+                                        ]
                                     ]
-                                    [ span [ class "mr-2" ] [ text result.permalink ]
-                                    , span [ class "text-sm font-light" ] [ text result.username ]
-                                    ]
-                                ]
+                            )
+                            userSearch.results
                         )
-                        userSearch.results
-                    )
+
+                  else
+                    text ""
                 ]
 
           else
@@ -762,7 +766,7 @@ viewPlayer player =
             getTrackArtworkUrl currentTrack
     in
     section [ class "fixed h-16 bottom-0 left-0 w-screen bg-black text-white" ]
-        [ div [ class ("flex items-center max-w-2xl mx-auto h-full p-4" ++ justify) ]
+        [ div [ class ("flex items-center max-w-screen-sm mx-auto h-full p-4" ++ justify) ]
             [ div [ class "flex flex-none items-center" ]
                 [ button
                     [ class <| "h-6" ++ (disabledClass <| not hasTrack)
@@ -844,9 +848,9 @@ viewPlaylists playlists playlistUIById player =
                             Nothing ->
                                 False
                 in
-                li [ class "border rounded mb-6 shadow-lg" ]
+                li [ class "border rounded mb-4 shadow-lg" ]
                     [ button
-                        [ class "text-xl font-bold flex justify-between items-center p-4 w-full"
+                        [ class "rounded text-xl font-bold flex justify-between items-center p-4 w-full"
                         , onClick (TogglePlaylistAccordion playlist.id)
                         ]
                         [ span [ class "w-full text-left" ] [ text playlist.title ]

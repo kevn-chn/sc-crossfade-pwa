@@ -16,3 +16,8 @@
 body {
   font-family: 'Roboto Condensed', sans-serif;
 }
+
+a:focus, button:focus, input:focus {
+  @apply outline-none;
+  @apply shadow-outline;
+}
