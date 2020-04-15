@@ -890,7 +890,7 @@ viewPlaylists playlists accordions player =
                         ]
                         [ span [ class "w-full text-left" ] [ text playlist.title ]
                         , a
-                            [ class "h-6 ml-2 sr-only group-hover:not-sr-only"
+                            [ class "h-6 ml-2 opacity-0 group-hover:opacity-100"
                             , href playlist.permalink_url
                             , rel "noopener noreferrer"
                             , target "_blank"
@@ -991,7 +991,7 @@ viewTrack track trackIndex player playlist =
         , p [ class ("flex-grow text-left truncate" ++ bold) ]
             [ text (track.user.username ++ " - " ++ track.title) ]
         , a
-            [ class "h-6 ml-2 sr-only group-hover:not-sr-only"
+            [ class "h-6 ml-2 opacity-0 group-hover:opacity-100"
             , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"

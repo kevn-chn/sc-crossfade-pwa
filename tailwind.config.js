@@ -1,7 +1,7 @@
 module.exports = {
   theme: {},
   variants: {
-    accessibility: ['responsive', 'hover', 'focus', 'active', 'group-hover'],
+    opacity: ['responsive', 'hover', 'focus', 'group-hover'],
   },
   plugins: [],
 };

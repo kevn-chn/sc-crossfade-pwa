@@ -22,7 +22,7 @@ a:focus, button:focus, input:focus {
   @apply shadow-outline;
 }
 
-.group:focus .group-hover\:not-sr-only,
-.group .group-hover\:not-sr-only:focus {
-  @apply not-sr-only;
+.group:focus .group-hover\:opacity-100,
+.group-hover\:opacity-100:focus {
+  @apply opacity-100;
 }
