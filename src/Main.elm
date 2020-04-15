@@ -91,7 +91,7 @@ type alias Model =
     { flags : Flags
     , player : Player
     , playlists : List PlaylistInfo
-    , playlistUIById : Dict Int Accordion
+    , accordions : Dict Int Accordion
     , user : User
     , userSearch : UserSearch
     }
@@ -102,7 +102,7 @@ initialModel flags =
     { flags = flags
     , player = defaultPlayer
     , playlists = []
-    , playlistUIById = Dict.empty
+    , accordions = Dict.empty
     , user = defaultUser
     , userSearch = defaultUserSearch
     }
@@ -332,8 +332,8 @@ update msg model =
 
         GotFavorites (Ok favorites) ->
             let
-                playlistUIById =
-                    Dict.insert 0 { isOpen = False } model.playlistUIById
+                accordions =
+                    Dict.insert 0 { isOpen = False } model.accordions
 
                 likes =
                     { title = "Likes"
@@ -348,20 +348,23 @@ update msg model =
                 playlists =
                     likes :: model.playlists
             in
-            ( { model | playlists = playlists, playlistUIById = playlistUIById }, Cmd.none )
+            ( { model | playlists = playlists, accordions = accordions }, Cmd.none )
 
         GotFavorites (Err _) ->
             ( model, Cmd.none )
 
         GotPlaylistsCollection (Ok collection) ->
             let
-                playlistUIById =
+                newAccordions =
                     Dict.fromList (List.map (\list -> ( list.id, { isOpen = False } )) collection)
+
+                accordions =
+                    Dict.union model.accordions newAccordions
 
                 playlists =
                     List.append model.playlists collection
             in
-            ( { model | playlists = playlists, playlistUIById = playlistUIById }, Cmd.none )
+            ( { model | playlists = playlists, accordions = accordions }, Cmd.none )
 
         GotPlaylistsCollection (Err _) ->
             ( model, Cmd.none )
@@ -521,7 +524,7 @@ update msg model =
                 id =
                     String.fromInt user.id
             in
-            ( { model | player = defaultPlayer, playlists = [], playlistUIById = Dict.empty, user = user, userSearch = defaultUserSearch }
+            ( { model | playlists = [], accordions = Dict.empty, user = user, userSearch = defaultUserSearch }
             , Cmd.batch
                 [ fetchFavorites id model.flags
                 , fetchPlaylistsCollection id model.flags
@@ -531,7 +534,7 @@ update msg model =
         TogglePlaylistAccordion id ->
             let
                 accordion =
-                    case Dict.get id model.playlistUIById of
+                    case Dict.get id model.accordions of
                         Just state ->
                             { state | isOpen = not state.isOpen }
 
@@ -539,9 +542,9 @@ update msg model =
                             { isOpen = False }
 
                 updated =
-                    Dict.insert id accordion model.playlistUIById
+                    Dict.insert id accordion model.accordions
             in
-            ( { model | playlistUIById = updated }, Cmd.none )
+            ( { model | accordions = updated }, Cmd.none )
 
         ToggleUserSearch ->
             let
@@ -622,11 +625,24 @@ subscriptions model =
 formatTime : Int -> String
 formatTime time =
     let
+        hourInMillis =
+            3600000
+
         posixTime =
             millisToPosix time
+
+        units =
+            if time >= hourInMillis then
+                [ Time.toHour, Time.toMinute, Time.toSecond ]
+
+            else
+                [ Time.toMinute, Time.toSecond ]
+
+        convertToUnit toUnit =
+            toUnit utc posixTime
     in
-    [ Time.toMinute utc posixTime, Time.toSecond utc posixTime ]
-        |> List.map (String.fromInt >> String.padLeft 2 '0')
+    units
+        |> List.map (convertToUnit >> String.fromInt >> String.padLeft 2 '0')
         |> String.join ":"
 
 
@@ -654,7 +670,7 @@ getTrackArtworkUrl track =
 
 
 view : Model -> Html Msg
-view { player, playlists, playlistUIById, user, userSearch } =
+view { player, playlists, accordions, user, userSearch } =
     div [ class "max-w-screen-sm mx-auto mb-24" ]
         [ div [ class "p-4 sm:px-0 flex justify-between" ]
             [ h1 [ class "flex items-center" ]
@@ -726,7 +742,7 @@ view { player, playlists, playlistUIById, user, userSearch } =
 
           else
             text ""
-        , viewPlaylists playlists playlistUIById player
+        , viewPlaylists playlists accordions player
         , viewPlayer player
         ]
 
@@ -835,13 +851,13 @@ viewPlayer player =
 
 
 viewPlaylists : List PlaylistInfo -> Dict Int Accordion -> Player -> Html Msg
-viewPlaylists playlists playlistUIById player =
+viewPlaylists playlists accordions player =
     ul []
         (List.map
             (\playlist ->
                 let
                     isOpen =
-                        case Dict.get playlist.id playlistUIById of
+                        case Dict.get playlist.id accordions of
                             Just state ->
                                 state.isOpen
 
@@ -850,24 +866,26 @@ viewPlaylists playlists playlistUIById player =
                 in
                 li [ class "border rounded mb-4 shadow-lg" ]
                     [ button
-                        [ class "rounded text-xl font-bold flex justify-between items-center p-4 w-full"
+                        [ class "rounded text-xl font-bold flex justify-between items-center p-4 w-full group"
                         , onClick (TogglePlaylistAccordion playlist.id)
                         ]
                         [ span [ class "w-full text-left" ] [ text playlist.title ]
-                        , if playlist.duration > 0 then
-                            span [ class "ml-2 text-base font-normal" ] [ text <| formatTime playlist.duration ]
-
-                          else
-                            text ""
                         , a
-                            [ class "h-6 ml-2"
+                            [ class "h-6 ml-2 sr-only group-hover:not-sr-only"
                             , href playlist.permalink_url
                             , rel "noopener noreferrer"
                             , target "_blank"
                             , title "Open playlist in Soundcloud"
                             , onClickStopPropagation NoOp
                             ]
-                            [ Icons.toHtml [] Icons.externalLink ]
+                            [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.externalLink ]
+                        , span [ class "ml-2 text-base font-normal" ]
+                            [ if playlist.duration > 0 then
+                                text <| formatTime playlist.duration
+
+                              else
+                                text "––:––"
+                            ]
                         ]
                     , if isOpen then
                         if not (List.isEmpty playlist.tracks) then
@@ -932,7 +950,7 @@ viewTrack track trackIndex player playlist =
             getTrackArtworkUrl track
     in
     button
-        [ class ("flex justify-between items-center px-4 py-1 w-full hover:bg-gray-200" ++ backgroundColor)
+        [ class ("flex justify-between items-center px-4 py-1 w-full group hover:bg-gray-200" ++ backgroundColor)
         , onClick playMsg
         ]
         [ div [ class "relative flex-none w-6 h-6 mr-2 bg-gray-300" ]
@@ -953,9 +971,8 @@ viewTrack track trackIndex player playlist =
             ]
         , p [ class ("flex-grow text-left truncate" ++ bold) ]
             [ text (track.user.username ++ " - " ++ track.title) ]
-        , p [ class "ml-2 text-sm font-light" ] [ text <| formatTime track.duration ]
         , a
-            [ class "h-6 ml-2"
+            [ class "h-6 ml-2 sr-only group-hover:not-sr-only"
             , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"
@@ -963,6 +980,7 @@ viewTrack track trackIndex player playlist =
             , onClickStopPropagation NoOp
             ]
             [ Icons.toHtml [ Svg.Attributes.class "p-1" ] Icons.externalLink ]
+        , p [ class "ml-2 text-sm font-light" ] [ text <| formatTime track.duration ]
         ]
 
 
