@@ -202,26 +202,26 @@ userDecoder =
         |> required "username" Decode.string
 
 
-fetchUserInfo : String -> Flags -> Cmd Msg
+fetchUserInfo : Int -> Flags -> Cmd Msg
 fetchUserInfo userId flags =
     Http.get
-        { url = Api.url [ "users", userId ] flags []
+        { url = Api.url [ "users", String.fromInt userId ] flags []
         , expect = Http.expectJson GotUserInfo userDecoder
         }
 
 
-fetchPlaylistsCollection : String -> Flags -> Cmd Msg
+fetchPlaylistsCollection : Int -> Flags -> Cmd Msg
 fetchPlaylistsCollection userId flags =
     Http.get
-        { url = Api.url [ "users", userId, "playlists" ] flags []
+        { url = Api.url [ "users", String.fromInt userId, "playlists" ] flags []
         , expect = Http.expectJson GotPlaylistsCollection (Decode.list playlistDecoder)
         }
 
 
-fetchFavorites : String -> Flags -> Cmd Msg
+fetchFavorites : Int -> Flags -> Cmd Msg
 fetchFavorites userId flags =
     Http.get
-        { url = Api.url [ "users", userId, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
+        { url = Api.url [ "users", String.fromInt userId, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
         , expect = Http.expectJson GotFavorites favoritesDecoder
         }
 
@@ -262,6 +262,7 @@ type Msg
     | SeekTrackStart String
     | SeekTrackRelease String
     | SeekTrack Int
+    | SetDefaultUserId Int
     | SkipBack
     | FadeInNextTrack
     | NextTrack
@@ -468,6 +469,16 @@ update msg model =
             in
             ( { model | player = updated }, Audio.seek newTime )
 
+        SetDefaultUserId id ->
+            let
+                { flags } =
+                    model
+
+                updated =
+                    { flags | sc_user_id = id }
+            in
+            ( { model | flags = updated }, Audio.setDefaultUserId id )
+
         SkipBack ->
             if model.player.currentIndex == 0 || model.player.elapsedTime > 3000 then
                 update (SeekTrack 0) model
@@ -520,14 +531,10 @@ update msg model =
             ( { model | userSearch = updated }, searchCmd )
 
         SwitchUser user ->
-            let
-                id =
-                    String.fromInt user.id
-            in
             ( { model | playlists = [], accordions = Dict.empty, user = user, userSearch = defaultUserSearch }
             , Cmd.batch
-                [ fetchFavorites id model.flags
-                , fetchPlaylistsCollection id model.flags
+                [ fetchFavorites user.id model.flags
+                , fetchPlaylistsCollection user.id model.flags
                 ]
             )
 
@@ -670,7 +677,7 @@ getTrackArtworkUrl track =
 
 
 view : Model -> Html Msg
-view { player, playlists, accordions, user, userSearch } =
+view { flags, player, playlists, accordions, user, userSearch } =
     div [ class "max-w-screen-sm mx-auto mb-24" ]
         [ div [ class "p-4 sm:px-0 flex justify-between" ]
             [ h1 [ class "flex items-center" ]
@@ -698,15 +705,27 @@ view { player, playlists, accordions, user, userSearch } =
                     [ text user.permalink ]
                 , span [ class "text-sm font-light" ] [ text user.username ]
                 ]
-            , button
-                [ class "border rounded hover:bg-gray-200 p-2 text-xs"
-                , onClick ToggleUserSearch
-                ]
-                [ if userSearch.isOpen then
-                    text "Collapse User Search"
+            , div [ class "flex items-center" ]
+                [ if user.id == flags.sc_user_id then
+                    p [ class "p-2 mr-2 text-xs font-light text-gray-700" ]
+                        [ text "Default" ]
 
                   else
-                    text "Switch User"
+                    button
+                        [ class "p-2 mr-2 text-xs hover:underline"
+                        , onClick (SetDefaultUserId user.id)
+                        ]
+                        [ text "Set as Default" ]
+                , button
+                    [ class "border rounded hover:bg-gray-200 p-2 text-xs"
+                    , onClick ToggleUserSearch
+                    ]
+                    [ if userSearch.isOpen then
+                        text "Collapse User Search"
+
+                      else
+                        text "Switch User"
+                    ]
                 ]
             ]
         , if userSearch.isOpen then

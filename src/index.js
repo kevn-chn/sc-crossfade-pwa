@@ -7,7 +7,7 @@ const app = Elm.Main.init({
   flags: {
     sc_api_client_id: process.env.ELM_APP_SC_API_CLIENT_ID,
     sc_app_version: process.env.ELM_APP_SC_APP_VERSION,
-    sc_user_id: process.env.ELM_APP_SC_USER_ID,
+    sc_user_id: Number(localStorage.getItem('sc_user_id') || process.env.ELM_APP_SC_USER_ID),
   },
 });
 
@@ -15,6 +15,10 @@ const app = Elm.Main.init({
 // unregister() to register() below. Note this comes with some pitfalls.
 // Learn more about service workers: https://bit.ly/CRA-PWA
 serviceWorker.register();
+
+app.ports.setDefaultUserId.subscribe((id) => {
+  localStorage.setItem('sc_user_id', id);
+});
 
 // Ports for Web Audio API playback
 let audio = initAudio();

@@ -14,6 +14,9 @@ type alias Artwork =
     }
 
 
+port setDefaultUserId : Int -> Cmd msg
+
+
 port setTrackMetadata : TrackMetadata -> Cmd msg
 
 
