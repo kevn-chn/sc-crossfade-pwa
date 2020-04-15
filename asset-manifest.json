@@ -1,7 +1,7 @@
 {
-  "main.css": "/sc-crossfade-pwa/static/css/main.3f721087.chunk.css",
-  "main.js": "/sc-crossfade-pwa/static/js/main.188780ae.chunk.js",
-  "main.js.map": "/sc-crossfade-pwa/static/js/main.188780ae.chunk.js.map",
+  "main.css": "/sc-crossfade-pwa/static/css/main.98868592.chunk.css",
+  "main.js": "/sc-crossfade-pwa/static/js/main.29be986f.chunk.js",
+  "main.js.map": "/sc-crossfade-pwa/static/js/main.29be986f.chunk.js.map",
   "runtime~main.js": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js",
   "runtime~main.js.map": "/sc-crossfade-pwa/static/js/runtime~main.a7be4044.js.map",
   "vendors~main.js": "/sc-crossfade-pwa/static/js/vendors~main.3ca81432.chunk.js",
@@ -12,5 +12,5 @@
   "feather-shuffle-512.png": "/sc-crossfade-pwa/feather-shuffle-512.png",
   "index.html": "/sc-crossfade-pwa/index.html",
   "manifest.json": "/sc-crossfade-pwa/manifest.json",
-  "precache-manifest.5fa718b278ec902f76f3d609219bd41a.js": "/sc-crossfade-pwa/precache-manifest.5fa718b278ec902f76f3d609219bd41a.js"
+  "precache-manifest.97e8084ecfd56b805f90aeb9cd80aa73.js": "/sc-crossfade-pwa/precache-manifest.97e8084ecfd56b805f90aeb9cd80aa73.js"
 }
