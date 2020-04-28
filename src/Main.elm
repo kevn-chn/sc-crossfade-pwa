@@ -4,16 +4,18 @@ import Api exposing (Flags)
 import Array exposing (Array)
 import Audio
 import Browser
+import Browser.Dom as Dom
 import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
 import Html.Attributes as Attr exposing (alt, class, disabled, href, rel, src, target, title)
-import Html.Events exposing (on, onClick, onInput, stopPropagationOn, targetValue)
+import Html.Events exposing (on, onBlur, onClick, onFocus, onInput, onMouseEnter, preventDefaultOn, stopPropagationOn, targetValue)
 import Http
 import Json.Decode as Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as Pipeline exposing (optional, required)
+import List.Extra exposing (getAt)
 import Svg.Attributes
-import Task exposing (Task)
+import Task
 import Time exposing (Posix, every, millisToPosix, utc)
 
 
@@ -80,6 +82,8 @@ type alias UserSearch =
     { isOpen : Bool
     , input : String
     , results : List User
+    , selectedIndex : Int
+    , showResults : Bool
     }
 
 
@@ -155,6 +159,8 @@ defaultUserSearch =
     { isOpen = False
     , input = ""
     , results = []
+    , selectedIndex = -1
+    , showResults = False
     }
 
 
@@ -267,9 +273,11 @@ type Msg
     | FadeInNextTrack
     | NextTrack
     | SearchUsers String
-    | SwitchUser User
+    | HoverUserResult Int
+    | SwitchUser Int
     | TogglePlaylistAccordion Int
     | ToggleUserSearch
+    | ToggleUserSuggestions Bool
     | Tick
     | NoOp
 
@@ -516,10 +524,10 @@ update msg model =
 
                 updated =
                     if String.isEmpty input then
-                        { userSearch | input = "", results = [] }
+                        { userSearch | input = "", results = [], selectedIndex = -1 }
 
                     else
-                        { userSearch | input = input }
+                        { userSearch | input = input, selectedIndex = -1 }
 
                 searchCmd =
                     if String.isEmpty input then
@@ -530,13 +538,41 @@ update msg model =
             in
             ( { model | userSearch = updated }, searchCmd )
 
-        SwitchUser user ->
-            ( { model | playlists = [], accordions = Dict.empty, user = user, userSearch = defaultUserSearch }
-            , Cmd.batch
-                [ fetchFavorites user.id model.flags
-                , fetchPlaylistsCollection user.id model.flags
-                ]
-            )
+        HoverUserResult index ->
+            let
+                { userSearch } =
+                    model
+
+                last =
+                    List.length userSearch.results - 1
+
+                newIndex =
+                    if index < 0 then
+                        last
+
+                    else if index > last then
+                        0
+
+                    else
+                        index
+
+                updated =
+                    { userSearch | selectedIndex = newIndex }
+            in
+            ( { model | userSearch = updated }, Cmd.none )
+
+        SwitchUser index ->
+            case getAt index model.userSearch.results of
+                Just user ->
+                    ( { model | playlists = [], accordions = Dict.empty, user = user, userSearch = defaultUserSearch }
+                    , Cmd.batch
+                        [ fetchFavorites user.id model.flags
+                        , fetchPlaylistsCollection user.id model.flags
+                        ]
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         TogglePlaylistAccordion id ->
             let
@@ -560,6 +596,16 @@ update msg model =
 
                 updated =
                     { userSearch | isOpen = not userSearch.isOpen }
+            in
+            ( { model | userSearch = updated }, focus "user-search" )
+
+        ToggleUserSuggestions showResults ->
+            let
+                { userSearch } =
+                    model
+
+                updated =
+                    { userSearch | showResults = showResults }
             in
             ( { model | userSearch = updated }, Cmd.none )
 
@@ -653,10 +699,42 @@ formatTime time =
         |> String.join ":"
 
 
+focus : String -> Cmd Msg
+focus elementId =
+    Task.attempt (\_ -> NoOp) (Dom.focus elementId)
+
+
 onClickStopPropagation : msg -> Attribute msg
 onClickStopPropagation msg =
     stopPropagationOn "click"
         (Decode.succeed ( msg, True ))
+
+
+keyToUserSearchMsg : UserSearch -> String -> Msg
+keyToUserSearchMsg { selectedIndex } key =
+    case key of
+        "Escape" ->
+            SearchUsers ""
+
+        "ArrowUp" ->
+            HoverUserResult <| selectedIndex - 1
+
+        "ArrowDown" ->
+            HoverUserResult <| selectedIndex + 1
+
+        "Enter" ->
+            SwitchUser selectedIndex
+
+        _ ->
+            NoOp
+
+
+onCustomKeyDown : (String -> Msg) -> Attribute Msg
+onCustomKeyDown keyToMsg =
+    Decode.field "key" Decode.string
+        |> Decode.map keyToMsg
+        |> Decode.map (\a -> ( a, a /= NoOp ))
+        |> preventDefaultOn "keydown"
 
 
 onCustomInput : String -> (String -> msg) -> Attribute msg
@@ -721,10 +799,10 @@ view { flags, player, playlists, accordions, user, userSearch } =
                     , onClick ToggleUserSearch
                     ]
                     [ if userSearch.isOpen then
-                        text "Collapse User Search"
+                        text "Close Search"
 
                       else
-                        text "Switch User"
+                        text "Search Users"
                     ]
                 ]
             ]
@@ -732,20 +810,34 @@ view { flags, player, playlists, accordions, user, userSearch } =
             div [ class "mx-4 sm:mx-0 mb-4 relative" ]
                 [ input
                     [ class "border rounded p-2 w-full"
+                    , Attr.autocomplete False
+                    , Attr.id "user-search"
                     , Attr.placeholder "Search Users"
-                    , onInput SearchUsers
                     , Attr.type_ "text"
                     , Attr.value userSearch.input
+                    , onBlur (ToggleUserSuggestions False)
+                    , onFocus (ToggleUserSuggestions True)
+                    , onInput SearchUsers
+                    , onCustomKeyDown (keyToUserSearchMsg userSearch)
                     ]
                     []
-                , if List.length userSearch.results > 0 then
+                , if userSearch.showResults && List.length userSearch.results > 0 then
                     ul [ class "bg-white absolute border rounded w-full z-10 shadow-md" ]
-                        (List.map
-                            (\result ->
+                        (List.indexedMap
+                            (\index result ->
+                                let
+                                    selected =
+                                        if index == userSearch.selectedIndex then
+                                            " bg-gray-200"
+
+                                        else
+                                            ""
+                                in
                                 li []
                                     [ button
-                                        [ class "hover:bg-gray-200 w-full p-2 text-left"
-                                        , onClick (SwitchUser result)
+                                        [ class ("w-full p-2 text-left" ++ selected)
+                                        , onClick (SwitchUser index)
+                                        , onMouseEnter (HoverUserResult index)
                                         ]
                                         [ span [ class "mr-2" ] [ text result.permalink ]
                                         , span [ class "text-sm font-light" ] [ text result.username ]
