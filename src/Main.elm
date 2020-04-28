@@ -49,7 +49,7 @@ type alias PlaylistInfo =
     , permalink_url : String
     , user : User
     , tracks : List TrackInfo
-    , waveform_url : String
+    , artwork_url : String
     }
 
 
@@ -351,7 +351,7 @@ update msg model =
                     , permalink_url = model.user.permalink_url ++ "/likes"
                     , user = model.user
                     , tracks = favorites.collection
-                    , waveform_url = ""
+                    , artwork_url = ""
                     }
 
                 playlists =
@@ -747,11 +747,22 @@ getTrackArtworkUrl track =
     if not (String.isEmpty track.artwork_url) then
         track.artwork_url
 
-    else if not (String.isEmpty track.user.avatar_url) then
+    else
         track.user.avatar_url
 
+
+getPlaylistArtworkUrl : PlaylistInfo -> String
+getPlaylistArtworkUrl playlist =
+    if not (String.isEmpty playlist.artwork_url) then
+        playlist.artwork_url
+
+    else if List.length playlist.tracks > 0 then
+        List.head playlist.tracks
+            |> Maybe.withDefault defaultTrackInfo
+            |> getTrackArtworkUrl
+
     else
-        ""
+        playlist.user.avatar_url
 
 
 view : Model -> Html Msg
@@ -974,13 +985,28 @@ viewPlaylists playlists accordions player =
 
                             Nothing ->
                                 False
+
+                    artwork_url =
+                        getPlaylistArtworkUrl playlist
                 in
                 li [ class "border rounded mb-4 shadow-lg" ]
                     [ button
                         [ class "rounded text-xl font-bold flex justify-between items-center p-4 w-full group"
                         , onClick (TogglePlaylistAccordion playlist.id)
                         ]
-                        [ span [ class "w-full text-left" ] [ text playlist.title ]
+                        [ div
+                            [ class "hidden sm:block flex-none relative w-8 h-8 mr-4 bg-gray-300" ]
+                            [ if not (String.isEmpty artwork_url) then
+                                img
+                                    [ class "absolute h-full"
+                                    , src (String.replace "-large" "-small" artwork_url)
+                                    ]
+                                    []
+
+                              else
+                                text ""
+                            ]
+                        , span [ class "w-full text-left" ] [ text playlist.title ]
                         , a
                             [ class "h-6 ml-2 opacity-0 group-hover:opacity-100"
                             , href playlist.permalink_url
