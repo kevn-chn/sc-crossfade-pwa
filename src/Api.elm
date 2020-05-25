@@ -8,7 +8,7 @@ import Url.Builder exposing (QueryParameter)
 type alias Flags =
     { sc_api_client_id : String
     , sc_app_version : String
-    , sc_user_id : Int
+    , sc_user_id : String
     }
 
 

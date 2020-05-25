@@ -7,7 +7,7 @@ const app = Elm.Main.init({
   flags: {
     sc_api_client_id: process.env.ELM_APP_SC_API_CLIENT_ID,
     sc_app_version: process.env.ELM_APP_SC_APP_VERSION,
-    sc_user_id: Number(localStorage.getItem('sc_user_id') || process.env.ELM_APP_SC_USER_ID),
+    sc_user_id: localStorage.getItem('sc_user_id') || process.env.ELM_APP_SC_USER_ID,
   },
 });
 

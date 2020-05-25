@@ -3,8 +3,9 @@ module Main exposing (..)
 import Api exposing (Flags)
 import Array exposing (Array)
 import Audio
-import Browser
+import Browser exposing (Document)
 import Browser.Dom as Dom
+import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import FeatherIcons as Icons
 import Html exposing (..)
@@ -17,6 +18,7 @@ import List.Extra exposing (getAt)
 import Svg.Attributes
 import Task
 import Time exposing (Posix, every, millisToPosix, utc)
+import Url exposing (Url)
 
 
 type alias User =
@@ -93,6 +95,7 @@ type alias UserSearch =
 
 type alias Model =
     { flags : Flags
+    , key : Nav.Key
     , player : Player
     , playlists : List PlaylistInfo
     , accordions : Dict Int Accordion
@@ -101,9 +104,10 @@ type alias Model =
     }
 
 
-initialModel : Flags -> Model
-initialModel flags =
+initialModel : Flags -> Nav.Key -> Model
+initialModel flags navKey =
     { flags = flags
+    , key = navKey
     , player = defaultPlayer
     , playlists = []
     , accordions = Dict.empty
@@ -208,26 +212,26 @@ userDecoder =
         |> required "username" Decode.string
 
 
-fetchUserInfo : Int -> Flags -> Cmd Msg
+fetchUserInfo : String -> Flags -> Cmd Msg
 fetchUserInfo userId flags =
     Http.get
-        { url = Api.url [ "users", String.fromInt userId ] flags []
+        { url = Api.url [ "users", userId ] flags []
         , expect = Http.expectJson GotUserInfo userDecoder
         }
 
 
-fetchPlaylistsCollection : Int -> Flags -> Cmd Msg
+fetchPlaylistsCollection : String -> Flags -> Cmd Msg
 fetchPlaylistsCollection userId flags =
     Http.get
-        { url = Api.url [ "users", String.fromInt userId, "playlists" ] flags []
+        { url = Api.url [ "users", userId, "playlists" ] flags []
         , expect = Http.expectJson GotPlaylistsCollection (Decode.list playlistDecoder)
         }
 
 
-fetchFavorites : Int -> Flags -> Cmd Msg
+fetchFavorites : String -> Flags -> Cmd Msg
 fetchFavorites userId flags =
     Http.get
-        { url = Api.url [ "users", String.fromInt userId, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
+        { url = Api.url [ "users", userId, "favorites" ] flags [ ( "linked_partitioning", "1" ), ( "page_size", "50" ) ]
         , expect = Http.expectJson GotFavorites favoritesDecoder
         }
 
@@ -240,15 +244,29 @@ searchUsers searchTerm flags =
         }
 
 
-init : Flags -> ( Model, Cmd Msg )
-init flags =
-    ( initialModel flags
+changeRouteTo : Url -> Flags -> Nav.Key -> ( Model, Cmd Msg )
+changeRouteTo url flags navKey =
+    let
+        user_id =
+            case url.fragment of
+                Nothing ->
+                    flags.sc_user_id
+
+                Just fragment ->
+                    String.replace "/" "" fragment
+    in
+    ( initialModel flags navKey
     , Cmd.batch
-        [ fetchUserInfo flags.sc_user_id flags
-        , fetchFavorites flags.sc_user_id flags
-        , fetchPlaylistsCollection flags.sc_user_id flags
+        [ fetchUserInfo user_id flags
+        , fetchFavorites user_id flags
+        , fetchPlaylistsCollection user_id flags
         ]
     )
+
+
+init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init flags url navKey =
+    changeRouteTo url flags navKey
 
 
 
@@ -256,7 +274,9 @@ init flags =
 
 
 type Msg
-    = GotUserInfo (Result Http.Error User)
+    = ChangedUrl Url
+    | ClickedLink Browser.UrlRequest
+    | GotUserInfo (Result Http.Error User)
     | GotFavorites (Result Http.Error Favorites)
     | GotPlaylistsCollection (Result Http.Error PlaylistsCollection)
     | GotUserSearch (Result Http.Error (List User))
@@ -333,6 +353,22 @@ initPlayback model trackIndex isFadeIn =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        ChangedUrl url ->
+            changeRouteTo url model.flags model.key
+
+        ClickedLink urlRequest ->
+            case urlRequest of
+                Browser.Internal url ->
+                    case url.fragment of
+                        Nothing ->
+                            ( model, Cmd.none )
+
+                        Just _ ->
+                            ( model, Nav.pushUrl model.key (Url.toString url) )
+
+                Browser.External href ->
+                    ( model, Nav.load href )
+
         GotUserInfo (Ok user) ->
             ( { model | user = user }, Cmd.none )
 
@@ -483,7 +519,7 @@ update msg model =
                     model
 
                 updated =
-                    { flags | sc_user_id = id }
+                    { flags | sc_user_id = String.fromInt id }
             in
             ( { model | flags = updated }, Audio.setDefaultUserId id )
 
@@ -565,10 +601,7 @@ update msg model =
             case getAt index model.userSearch.results of
                 Just user ->
                     ( { model | playlists = [], accordions = Dict.empty, user = user, userSearch = defaultUserSearch }
-                    , Cmd.batch
-                        [ fetchFavorites user.id model.flags
-                        , fetchPlaylistsCollection user.id model.flags
-                        ]
+                    , Nav.pushUrl model.key ("#/" ++ user.permalink)
                     )
 
                 Nothing ->
@@ -765,8 +798,15 @@ getPlaylistArtworkUrl playlist =
         playlist.user.avatar_url
 
 
-view : Model -> Html Msg
-view { flags, player, playlists, accordions, user, userSearch } =
+view : Model -> Document Msg
+view model =
+    { title = "SC Crossfade"
+    , body = [ viewContent model ]
+    }
+
+
+viewContent : Model -> Html Msg
+viewContent { flags, player, playlists, accordions, user, userSearch } =
     div [ class "max-w-screen-sm mx-auto mb-24" ]
         [ div [ class "p-4 sm:px-0 flex justify-between" ]
             [ h1 [ class "flex items-center" ]
@@ -795,7 +835,7 @@ view { flags, player, playlists, accordions, user, userSearch } =
                 , span [ class "text-sm font-light" ] [ text user.username ]
                 ]
             , div [ class "flex items-center" ]
-                [ if user.id == flags.sc_user_id then
+                [ if String.fromInt user.id == flags.sc_user_id then
                     p [ class "p-2 mr-2 text-xs font-light text-gray-700" ]
                         [ text "Default" ]
 
@@ -818,7 +858,11 @@ view { flags, player, playlists, accordions, user, userSearch } =
                 ]
             ]
         , if userSearch.isOpen then
-            div [ class "mx-4 sm:mx-0 mb-4 relative" ]
+            div
+                [ class "mx-4 sm:mx-0 mb-4 relative"
+                , onCustomKeyDown (keyToUserSearchMsg userSearch)
+                , Attr.tabindex -1
+                ]
                 [ input
                     [ class "border rounded p-2 w-full"
                     , Attr.autocomplete False
@@ -829,11 +873,18 @@ view { flags, player, playlists, accordions, user, userSearch } =
                     , onBlur (ToggleUserSuggestions False)
                     , onFocus (ToggleUserSuggestions True)
                     , onInput SearchUsers
-                    , onCustomKeyDown (keyToUserSearchMsg userSearch)
                     ]
                     []
-                , if userSearch.showResults && List.length userSearch.results > 0 then
-                    ul [ class "bg-white absolute border rounded w-full z-10 shadow-md" ]
+                , if List.length userSearch.results > 0 then
+                    let
+                        hidden =
+                            if not userSearch.showResults then
+                                " hidden"
+
+                            else
+                                ""
+                    in
+                    ul [ class ("bg-white absolute border rounded w-full z-10 shadow-md" ++ hidden) ]
                         (List.indexedMap
                             (\index result ->
                                 let
@@ -845,9 +896,9 @@ view { flags, player, playlists, accordions, user, userSearch } =
                                             ""
                                 in
                                 li []
-                                    [ button
-                                        [ class ("w-full p-2 text-left" ++ selected)
-                                        , onClick (SwitchUser index)
+                                    [ a
+                                        [ class ("block w-full p-2 text-left" ++ selected)
+                                        , href ("#/" ++ result.permalink)
                                         , onMouseEnter (HoverUserResult index)
                                         ]
                                         [ span [ class "mr-2" ] [ text result.permalink ]
@@ -1085,6 +1136,13 @@ viewTrack track trackIndex player playlist =
 
         artwork_url =
             getTrackArtworkUrl track
+
+        linkOpacity =
+            if not isPlaying then
+                " opacity-0 group-hover:opacity-100"
+
+            else
+                ""
     in
     button
         [ class ("flex justify-between items-center px-4 py-1 w-full group hover:bg-gray-200" ++ backgroundColor)
@@ -1109,7 +1167,7 @@ viewTrack track trackIndex player playlist =
         , p [ class ("flex-grow text-left truncate" ++ bold) ]
             [ text (track.user.username ++ " - " ++ track.title) ]
         , a
-            [ class "h-6 ml-2 opacity-0 group-hover:opacity-100"
+            [ class ("h-6 ml-2" ++ linkOpacity)
             , href track.permalink_url
             , rel "noopener noreferrer"
             , target "_blank"
@@ -1127,9 +1185,11 @@ viewTrack track trackIndex player playlist =
 
 main : Program Flags Model Msg
 main =
-    Browser.element
-        { view = view
-        , init = init
-        , update = update
+    Browser.application
+        { init = init
+        , onUrlChange = ChangedUrl
+        , onUrlRequest = ClickedLink
         , subscriptions = subscriptions
+        , update = update
+        , view = view
         }
